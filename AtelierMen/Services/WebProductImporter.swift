@@ -394,10 +394,17 @@ public final class WebProductImporter {
     private func assignCategoryAndSubcategory(for text: String, result: inout ImportedProductData) {
         let shoeKeywords = ["shoe", "sneaker", "boot", "loafer", "oxford", "derby", "footwear", "sandal", "trainer", "slides", "downshifter"]
         let bagKeywords = ["bag", "backpack", "briefcase", "duffel", "duffle", "luggage", "suitcase", "sling", "tote", "messenger", "dopp kit", "carry-on", "pouch"]
-        let groomingKeywords = ["cologne", "perfume", "fragrance", "serum", "moisturizer", "skincare", "cream", "shave", "razor", "pomade", "beard", "eau de parfum", "grooming", "lotion", "cleanser"]
+        let groomingKeywords = [
+            "cologne", "perfume", "fragrance", "serum", "moisturizer", "skincare", "cream",
+            "shave", "razor", "pomade", "beard", "eau de parfum", "grooming", "lotion", "cleanser",
+            "tongue", "cleaner", "scraper", "oral", "dental", "toothbrush", "toothpaste", "floss",
+            "hygiene", "trimmer", "clipper", "comb", "tweezer", "nail", "soap", "body wash",
+            "deodorant", "shampoo", "conditioner", "bath"
+        ]
         let accessoryKeywords = ["wallet", "cardholder", "belt", "sunglass", "glasses", "eyewear", "cufflink", "tie clip", "watch winder", "pocket square", "scarf", "hat", "cap"]
         let techKeywords = ["laptop", "phone", "macbook", "headphone", "audio", "earbuds", "watch", "camera", "tablet", "gadget", "charger", "display", "ipad", "airpods"]
         let sportswearKeywords = ["sportswear", "activewear", "gym", "workout", "training", "dri-fit", "aeroready", "tracksuit", "jogger", "compression", "jersey", "rashguard", "athletic", "legging", "running shorts", "running tee", "sports tee", "gym tee", "gym shorts"]
+        let clothesKeywords = ["shirt", "t-shirt", "tshirt", "tee", "polo", "suit", "blazer", "jacket", "coat", "trouser", "pant", "chino", "denim", "jean", "knit", "sweater", "cardigan", "hoodie", "overcoat", "kurta", "sherwani", "waistcoat"]
 
         if shoeKeywords.contains(where: { text.contains($0) }) {
             result.category = .shoes
@@ -437,6 +444,10 @@ public final class WebProductImporter {
                 result.subcategory = "Face & Skincare Serums"
             } else if text.contains("shave") || text.contains("razor") || text.contains("beard") {
                 result.subcategory = "Shaving & Beard Care"
+            } else if text.contains("tongue") || text.contains("scraper") || text.contains("dental") || text.contains("oral") || text.contains("toothbrush") || text.contains("brush") || text.contains("floss") || text.contains("trimmer") || text.contains("clipper") || text.contains("comb") || text.contains("cleaner") || text.contains("nail") || text.contains("tweezer") {
+                result.subcategory = "Grooming Tools & Trimmers"
+            } else if text.contains("soap") || text.contains("shower") || text.contains("bath") || text.contains("deodorant") || text.contains("body wash") || text.contains("shampoo") {
+                result.subcategory = "Body & Shower Essentials"
             } else {
                 result.subcategory = "Hair Styling & Pomades"
             }
@@ -484,16 +495,29 @@ public final class WebProductImporter {
             } else {
                 result.subcategory = "Outdoor & Trail Activewear"
             }
-        } else {
+        } else if clothesKeywords.contains(where: { text.contains($0) }) {
             result.category = .clothes
             if text.contains("suit") || text.contains("blazer") {
                 result.subcategory = "Suits & Blazers"
             } else if text.contains("shirt") || text.contains("polo") {
                 result.subcategory = "Shirts & Polos"
-            } else if text.contains("jacket") || text.contains("coat") {
+            } else if text.contains("jacket") || text.contains("coat") || text.contains("overcoat") {
                 result.subcategory = "Jackets & Outerwear"
+            } else if text.contains("trouser") || text.contains("pant") || text.contains("chino") {
+                result.subcategory = "Trousers & Chinos"
+            } else if text.contains("jean") || text.contains("denim") {
+                result.subcategory = "Denim & Jeans"
             } else {
                 result.subcategory = "T-Shirts & Knits"
+            }
+        } else {
+            // Unrecognized fallback: Do not falsely assign to T-Shirts & Knits!
+            if text.contains("cleaner") || text.contains("tool") || text.contains("hygiene") || text.contains("care") {
+                result.category = .grooming
+                result.subcategory = "Grooming Tools & Trimmers"
+            } else {
+                result.category = .accessories
+                result.subcategory = "EDC & Accessories"
             }
         }
     }
