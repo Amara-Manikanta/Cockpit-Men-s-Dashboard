@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 public struct WishlistView: View {
     @ObservedObject var dataStore: DataStore
@@ -592,6 +593,11 @@ public struct AddWishlistItemSheet: View {
     @State private var priority: WishlistPriority = .high
     @State private var notes: String = ""
 
+    // Photos
+    @State private var photos: [String] = []
+    @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
+    @State private var showWebImportSheet = false
+
     public init(dataStore: DataStore) {
         self.dataStore = dataStore
     }
@@ -599,60 +605,26 @@ public struct AddWishlistItemSheet: View {
     public var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    TextField("Product Name (e.g. Nike Downshifter 14)", text: $name)
-                        .font(.system(size: 15))
-                        .padding(12)
-                        .background(LuxuryTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(LuxuryTheme.textPrimary)
+                VStack(spacing: 20) {
+                    // Category Selector Pills
+                    categorySelector
 
-                    TextField("Brand / Maker (e.g. Nike, Rimowa)", text: $brand)
-                        .font(.system(size: 15))
-                        .padding(12)
-                        .background(LuxuryTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(LuxuryTheme.textPrimary)
+                    // Photos Section (Gallery + Web Import + Cover preview)
+                    photosSection
 
-                    Picker("Category", selection: $category) {
-                        ForEach(ItemCategory.allCases) { cat in
-                            Text(cat.rawValue).tag(cat)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
+                    // Core Details Section
+                    coreDetailsSection
 
-                    TextField("Target Price (₹)", text: $priceText)
-                        .keyboardType(.numberPad)
-                        .font(.system(size: 15))
-                        .padding(12)
-                        .background(LuxuryTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(LuxuryTheme.textPrimary)
+                    // Target Price & Store Link
+                    valuationSection
 
-                    TextField("Store URL (e.g. https://amazon.in/...)", text: $storeUrl)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .font(.system(size: 15))
-                        .padding(12)
-                        .background(LuxuryTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(LuxuryTheme.textPrimary)
+                    // Priority Picker
+                    prioritySection
 
-                    Picker("Priority", selection: $priority) {
-                        ForEach(WishlistPriority.allCases) { p in
-                            Text(p.rawValue).tag(p)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
+                    // Notes Section
+                    notesSection
 
-                    TextField("Notes & Why You Want It", text: $notes)
-                        .font(.system(size: 15))
-                        .padding(12)
-                        .background(LuxuryTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(LuxuryTheme.textPrimary)
-
+                    // Submit Button
                     Button(action: saveWishlist) {
                         Text("Add to Wishlist ✨")
                             .font(.system(size: 15, weight: .bold))
@@ -663,8 +635,11 @@ public struct AddWishlistItemSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                     .disabled(name.isEmpty)
+                    .padding(.top, 10)
+                    .padding(.bottom, 30)
                 }
-                .padding(20)
+                .padding(.horizontal)
+                .padding(.vertical, 16)
             }
             .background(LuxuryTheme.background.ignoresSafeArea())
             .navigationTitle("New Wishlist Item")
@@ -674,6 +649,263 @@ public struct AddWishlistItemSheet: View {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(LuxuryTheme.textSecondary)
                 }
+            }
+            .sheet(isPresented: $showWebImportSheet) {
+                WebImportSheet { imported in
+                    applyImportedData(imported)
+                }
+            }
+        }
+    }
+
+    private var categorySelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(ItemCategory.allCases) { cat in
+                    Button(action: {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            category = cat
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: cat.iconName)
+                                .font(.system(size: 12, weight: .bold))
+                            Text(cat.rawValue)
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundStyle(category == cat ? Color.black : LuxuryTheme.textSecondary)
+                        .padding(.horizontal, 14)
+                        .frame(height: 42)
+                        .background(category == cat ? cat.accentColor : LuxuryTheme.cardBackground)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(category == cat ? Color.clear : LuxuryTheme.cardBorder, lineWidth: 1)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var photosSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Product Photos (\(photos.count))")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(LuxuryTheme.textPrimary)
+
+                Spacer()
+
+                if !photos.isEmpty {
+                    Text("First photo is cover")
+                        .font(.system(size: 11))
+                        .foregroundStyle(LuxuryTheme.textTertiary)
+                }
+            }
+
+            if !photos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Array(photos.enumerated()), id: \.offset) { index, photo in
+                            ZStack(alignment: .topTrailing) {
+                                ItemImageView(photoNameOrUrl: photo, category: category)
+                                    .frame(width: 100, height: 120)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(index == 0 ? LuxuryTheme.accentAmber : LuxuryTheme.cardBorder, lineWidth: index == 0 ? 2 : 1)
+                                    )
+
+                                if index == 0 {
+                                    Text("COVER")
+                                        .font(.system(size: 9, weight: .black))
+                                        .foregroundStyle(Color.black)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(LuxuryTheme.accentAmber)
+                                        .clipShape(Capsule())
+                                        .padding(4)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                }
+
+                                Button(action: {
+                                    photos.remove(at: index)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(Color.white, Color.black.opacity(0.7))
+                                        .padding(4)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                PhotosPicker(
+                    selection: $selectedPhotosPickerItems,
+                    maxSelectionCount: 6,
+                    matching: .images
+                ) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "photo.on.rectangle")
+                        Text("Gallery")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LuxuryTheme.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(LuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .onChange(of: selectedPhotosPickerItems) { newItems in
+                    Task {
+                        for item in newItems {
+                            if let data = try? await item.loadTransferable(type: Data.self),
+                               let savedFilename = ImageManager.shared.saveImageData(data) {
+                                await MainActor.run {
+                                    photos.append(savedFilename)
+                                }
+                            }
+                        }
+                        selectedPhotosPickerItems = []
+                    }
+                }
+
+                Button(action: { showWebImportSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "globe")
+                        Text("Amazon / Web")
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(LuxuryTheme.accentAmber)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(LuxuryTheme.accentAmber.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(LuxuryTheme.accentAmber.opacity(0.4), lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
+    }
+
+    private var coreDetailsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Core Details")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(LuxuryTheme.textPrimary)
+
+            customTextField(title: "Item Title *", placeholder: "e.g. Nike Downshifter 14, Nintendo Switch 2", text: $name)
+            customTextField(title: "Brand / Maker", placeholder: "e.g. Nike, Apple, Nintendo, Anker", text: $brand)
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
+    }
+
+    private var valuationSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Price & Store Link")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(LuxuryTheme.textPrimary)
+
+            customTextField(title: "Target Price (₹)", placeholder: "e.g. 4895", text: $priceText, keyboardType: .numberPad)
+            customTextField(title: "Product / Store URL", placeholder: "e.g. https://amazon.in/...", text: $storeUrl, keyboardType: .URL)
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
+    }
+
+    private var prioritySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Acquisition Priority")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(LuxuryTheme.textPrimary)
+
+            HStack(spacing: 8) {
+                ForEach(WishlistPriority.allCases) { p in
+                    Button(action: { priority = p }) {
+                        Text(p.badgeLabel)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(priority == p ? Color.black : LuxuryTheme.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(priority == p ? LuxuryTheme.gold : LuxuryTheme.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(priority == p ? Color.clear : LuxuryTheme.cardBorder, lineWidth: 1)
+                            )
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
+    }
+
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Notes & Intent")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(LuxuryTheme.textPrimary)
+
+            customTextField(title: "Why You Want It", placeholder: "e.g. Target acquisition for marathon training / daily rotation", text: $notes)
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
+    }
+
+    private func customTextField(title: String, placeholder: String, text: Binding<String>, keyboardType: UIKeyboardType = .default) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(LuxuryTheme.textSecondary)
+
+            TextField(placeholder, text: text)
+                .keyboardType(keyboardType)
+                .font(.system(size: 14))
+                .foregroundStyle(LuxuryTheme.textPrimary)
+                .padding(12)
+                .background(LuxuryTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(LuxuryTheme.cardBorder, lineWidth: 1)
+                )
+        }
+    }
+
+    private func applyImportedData(_ imported: ImportedProductData) {
+        if !imported.name.isEmpty { name = imported.name }
+        if !imported.brand.isEmpty { brand = imported.brand }
+        category = imported.category
+        if imported.price > 0 { priceText = "\(Int(imported.price))" }
+        for photo in imported.photoFilenames {
+            if !photos.contains(photo) {
+                photos.append(photo)
+            }
+        }
+        if !imported.sourceUrl.isEmpty {
+            storeUrl = imported.sourceUrl
+        }
+        if !imported.notes.isEmpty {
+            if notes.isEmpty {
+                notes = imported.notes
+            } else {
+                notes += "\n" + imported.notes
+            }
+            if storeUrl.isEmpty,
+               let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue),
+               let match = detector.matches(in: imported.notes, range: NSRange(location: 0, length: imported.notes.utf16.count)).first,
+               let url = match.url {
+                storeUrl = url.absoluteString
             }
         }
     }
@@ -685,7 +917,8 @@ public struct AddWishlistItemSheet: View {
             brand: brand.trimmingCharacters(in: .whitespacesAndNewlines),
             category: category,
             targetPrice: p,
-            storeUrl: storeUrl,
+            photos: photos,
+            storeUrl: storeUrl.trimmingCharacters(in: .whitespacesAndNewlines),
             priority: priority,
             notes: notes
         )

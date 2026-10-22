@@ -24,6 +24,16 @@ public final class ImageManager {
         if FileManager.default.fileExists(atPath: fileURL.path) {
             return fileURL
         }
+
+        // Check main bundle or BundledImages subfolder
+        let baseName = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        if let bundleUrl = Bundle.main.url(forResource: baseName, withExtension: ext) {
+            return bundleUrl
+        }
+        if let bundleUrl = Bundle.main.url(forResource: baseName, withExtension: ext, subdirectory: "BundledImages") {
+            return bundleUrl
+        }
         return nil
     }
 

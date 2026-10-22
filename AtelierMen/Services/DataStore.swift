@@ -344,6 +344,9 @@ public final class DataStore: ObservableObject {
         if let data = try? JSONEncoder().encode(items) {
             try? data.write(to: itemsFileUrl, options: .atomic)
             try? data.write(to: backupItemsFileUrl, options: .atomic)
+
+            // Persist to iOS Keychain (survives app deletion & reinstallation!)
+            _ = KeychainHelper.shared.save(data: data, service: "com.amara.AtelierMen", account: "wardrobe_items")
         }
     }
 
@@ -351,6 +354,9 @@ public final class DataStore: ObservableObject {
         if let data = try? JSONEncoder().encode(wishlistItems) {
             try? data.write(to: wishlistFileUrl, options: .atomic)
             try? data.write(to: backupWishlistFileUrl, options: .atomic)
+
+            // Persist to iOS Keychain (survives app deletion & reinstallation!)
+            _ = KeychainHelper.shared.save(data: data, service: "com.amara.AtelierMen", account: "wishlist_items")
         }
     }
 
@@ -367,32 +373,69 @@ public final class DataStore: ObservableObject {
     }
 
     private func loadData() {
-        // Items: try primary, then backup, only fall back to seeds if file literally does not exist
+        // Items: Check 4 levels (Primary, Backup, iOS Keychain, Embedded Bundle)
+        // Always pick the source with the most items to guarantee zero data loss!
+        var candidateLists: [[WardrobeItem]] = []
+
+        // 1. Documents primary
         if let data = try? Data(contentsOf: itemsFileUrl),
-           let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: data),
-           !loaded.isEmpty {
-            self.items = loaded
-        } else if let bData = try? Data(contentsOf: backupItemsFileUrl),
-                  let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: bData),
-                  !loaded.isEmpty {
-            self.items = loaded
+           let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: data), !loaded.isEmpty {
+            candidateLists.append(loaded)
+        }
+        // 2. Documents backup
+        if let bData = try? Data(contentsOf: backupItemsFileUrl),
+           let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: bData), !loaded.isEmpty {
+            candidateLists.append(loaded)
+        }
+        // 3. iOS Keychain (Survives app uninstallation & reinstallation!)
+        if let kcData = KeychainHelper.shared.read(service: "com.amara.AtelierMen", account: "wardrobe_items"),
+           let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: kcData), !loaded.isEmpty {
+            candidateLists.append(loaded)
+        }
+        // 4. Embedded App Bundle fallback (default_wardrobe.json)
+        if let bundleUrl = Bundle.main.url(forResource: "default_wardrobe", withExtension: "json"),
+           let bData = try? Data(contentsOf: bundleUrl),
+           let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: bData), !loaded.isEmpty {
+            candidateLists.append(loaded)
+        }
+
+        if let best = candidateLists.max(by: { $0.count < $1.count }) {
+            self.items = best
             saveItems()
-        } else if !FileManager.default.fileExists(atPath: itemsFileUrl.path) {
+        } else {
             self.items = SeedData.initialItems
             saveItems()
         }
 
-        // Wishlist: try primary, then backup, only seed if file does not exist
+        // Wishlist: Check 4 levels (Primary, Backup, iOS Keychain, Embedded Bundle)
+        var candidateWishlists: [[WishlistItem]] = []
+
+        // 1. Documents primary
         if let data = try? Data(contentsOf: wishlistFileUrl),
-           let loaded = try? JSONDecoder().decode([WishlistItem].self, from: data),
-           !loaded.isEmpty {
-            self.wishlistItems = loaded
-        } else if let bData = try? Data(contentsOf: backupWishlistFileUrl),
-                  let loaded = try? JSONDecoder().decode([WishlistItem].self, from: bData),
-                  !loaded.isEmpty {
-            self.wishlistItems = loaded
+           let loaded = try? JSONDecoder().decode([WishlistItem].self, from: data), !loaded.isEmpty {
+            candidateWishlists.append(loaded)
+        }
+        // 2. Documents backup
+        if let bData = try? Data(contentsOf: backupWishlistFileUrl),
+           let loaded = try? JSONDecoder().decode([WishlistItem].self, from: bData), !loaded.isEmpty {
+            candidateWishlists.append(loaded)
+        }
+        // 3. iOS Keychain (Survives app uninstallation & reinstallation!)
+        if let kcData = KeychainHelper.shared.read(service: "com.amara.AtelierMen", account: "wishlist_items"),
+           let loaded = try? JSONDecoder().decode([WishlistItem].self, from: kcData), !loaded.isEmpty {
+            candidateWishlists.append(loaded)
+        }
+        // 4. Embedded App Bundle fallback (default_wishlist.json)
+        if let bundleUrl = Bundle.main.url(forResource: "default_wishlist", withExtension: "json"),
+           let bData = try? Data(contentsOf: bundleUrl),
+           let loaded = try? JSONDecoder().decode([WishlistItem].self, from: bData), !loaded.isEmpty {
+            candidateWishlists.append(loaded)
+        }
+
+        if let best = candidateWishlists.max(by: { $0.count < $1.count }) {
+            self.wishlistItems = best
             saveWishlist()
-        } else if !FileManager.default.fileExists(atPath: wishlistFileUrl.path) {
+        } else {
             self.wishlistItems = SeedData.initialWishlist
             saveWishlist()
         }

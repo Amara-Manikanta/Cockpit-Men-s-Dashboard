@@ -1,0 +1,114 @@
+[
+  {
+    "id": "E1E5DC17-A817-4C1D-AF11-0742AFBBD51A",
+    "name": "Nintendo Switch 2 + Mario Kart World (OLED)",
+    "brand": "Nintendo",
+    "category": "Electronics",
+    "targetPrice": 61499.0,
+    "photos": [
+      "store_0E6E9DAF2D23.jpg"
+    ],
+    "storeUrl": "https://www.amazon.in/Nintendo-Switch-Mario-World-Black/dp/B0H7PXNHY2",
+    "priority": "High Priority",
+    "notes": "Next-gen Nintendo Switch 2 console with Mario Kart World key card and Red & Blue Joy-Con.",
+    "dateAdded": 751310000.0
+  },
+  {
+    "id": "2FBE8415-9AA2-4D67-BE98-DB4A8D2B0A08",
+    "name": "Angelbird AV PRO CFexpress Type A V4 MK3 (1TB)",
+    "brand": "Angelbird",
+    "category": "Electronics",
+    "targetPrice": 19990.0,
+    "photos": [
+      "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&q=80"
+    ],
+    "storeUrl": "https://www.angelbird.com/prod/av-pro-cfexpress-a-v4-mk3-3915/",
+    "priority": "High Priority",
+    "notes": "High performance Type A CFexpress card engineered for 8K RAW cinematic video recording.",
+    "dateAdded": 751310000.0
+  },
+  {
+    "id": "0A42EA23-7F2D-4F5C-BD21-88088D23CD5B",
+    "name": "Anker MagGo Wireless Charging Station (3-in-1 Foldable)",
+    "brand": "Anker",
+    "category": "Electronics",
+    "targetPrice": 8999.0,
+    "photos": [
+      "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&q=80"
+    ],
+    "storeUrl": "https://www.ankerindiasstore.com/p/black-anker-maggo-wireless-charging-station-3-in-1-foldable-pad/",
+    "priority": "High Priority",
+    "notes": "Qi2 Certified 15W ultra-fast foldable MagSafe 3-in-1 charging pad for iPhone, Apple Watch, and AirPods.",
+    "dateAdded": 751310000.0
+  },
+  {
+    "name": "Nike Men Downshifter 14 White/Black-Platinum Tint Running Shoes",
+    "targetPrice": 4895,
+    "id": "CCC4E94C-BA82-4241-9C01-89A01800D4C6",
+    "category": "Shoes",
+    "brand": "Nike",
+    "priority": "High Priority",
+    "photos": [
+      "https://m.media-amazon.com/images/I/51JjqvF1yrL._AC_SL1500_.jpg"
+    ],
+    "dateAdded": 814381755.897556,
+    "notes": "Comfortable daily running trainers in size 9 UK. Target acquisition for marathon training.",
+    "storeUrl": "https://www.amazon.in/Nike-Downshifter-Black-Platinum-Tint-Anthracite-Running/dp/B0FFTD9NS8"
+  },
+  {
+    "name": "Tracksmith Turnover Half Tights & Van Cortlandt Singlet",
+    "targetPrice": 12500,
+    "id": "60D2ABE6-A298-4DEA-B5C1-AA42C60661C0",
+    "category": "Sports Wear",
+    "brand": "Tracksmith",
+    "priority": "High Priority",
+    "photos": [
+      "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=800&q=80"
+    ],
+    "dateAdded": 814381755.897557,
+    "notes": "Premium Italian 2:09 mesh fabric with lightweight moisture management and gel pockets for endurance training.",
+    "storeUrl": "https://www.tracksmith.com"
+  },
+  {
+    "name": "Rimowa Original Check-In M Titanium Suitcase",
+    "targetPrice": 145000,
+    "id": "FC6951D6-E9CF-428D-AC0C-F2D88608FF0F",
+    "category": "Bags",
+    "brand": "Rimowa",
+    "priority": "High Priority",
+    "photos": [
+      "https://images.unsplash.com/photo-1565026057447-bc90a3dceb87?w=800&q=80"
+    ],
+    "dateAdded": 814381755.897558,
+    "notes": "68L check-in suitcase in brushed titanium for international flights.",
+    "storeUrl": "https://www.rimowa.com"
+  },
+  {
+    "name": "Tom Ford Tuscan Leather Eau de Parfum 50ml",
+    "targetPrice": 28000,
+    "id": "52DD5CCB-AD90-4E99-8CE2-95A1FF6D509D",
+    "category": "Grooming",
+    "brand": "Tom Ford",
+    "priority": "Medium",
+    "photos": [
+      "https://images.unsplash.com/photo-1523293182086-7651a899d37f?w=800&q=80"
+    ],
+    "dateAdded": 814381755.897558,
+    "notes": "Raw yet refined, sensual leather with night-blooming jasmine and black suede.",
+    "storeUrl": "https://www.tomfordbeauty.com"
+  },
+  {
+    "name": "Leica M11 Rangefinder Digital Camera",
+    "targetPrice": 720000,
+    "id": "F047F5B4-15AD-4C27-9FE5-9158A5F4F7BC",
+    "category": "Electronics",
+    "brand": "Leica",
+    "priority": "Low",
+    "photos": [
+      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&q=80"
+    ],
+    "dateAdded": 814381755.897559,
+    "notes": "Triple Resolution 60MP BSI sensor, black finish with aluminum top plate.",
+    "storeUrl": "https://leica-camera.com"
+  }
+]
