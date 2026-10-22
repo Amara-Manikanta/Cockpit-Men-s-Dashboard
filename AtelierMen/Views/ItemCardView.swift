@@ -20,16 +20,19 @@ public struct ItemCardView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Image Banner with Badges
+            // Bounded Image Container (Strictly constrained to prevent grid leakage)
             ZStack(alignment: .topTrailing) {
-                ItemImageView(
-                    photoNameOrUrl: item.primaryPhoto,
-                    category: item.category,
-                    contentMode: .fill
-                )
-                .frame(height: 175)
-                .frame(maxWidth: .infinity)
-                .clipped()
+                Rectangle()
+                    .fill(Color(white: 0.12))
+                    .frame(height: 175)
+                    .overlay(
+                        ItemImageView(
+                            photoNameOrUrl: item.primaryPhoto,
+                            category: item.category,
+                            contentMode: .fill
+                        )
+                    )
+                    .clipped()
 
                 // Gradient shadow for badges
                 LinearGradient(
@@ -176,5 +179,6 @@ public struct ItemCardView: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(isSelected ? LuxuryTheme.gold : Color.clear, lineWidth: 2)
         )
+        .clipped()
     }
 }

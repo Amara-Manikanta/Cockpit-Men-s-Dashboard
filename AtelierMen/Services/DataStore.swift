@@ -404,6 +404,10 @@ public final class DataStore: ObservableObject {
             self.tripPlans = SeedData.initialTrips(from: self.items)
             saveTrips()
         }
+
+        // Automatically clean and merge any duplicate pieces on load
+        removeDuplicates()
+        removeWishlistDuplicates()
     }
 }
 

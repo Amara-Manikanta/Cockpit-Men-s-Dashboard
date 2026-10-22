@@ -54,6 +54,8 @@ public struct ItemImageView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .clipped()
             } else if photoNameOrUrl.hasPrefix("http://") || photoNameOrUrl.hasPrefix("https://") {
                 AsyncImage(url: URL(string: photoNameOrUrl)) { phase in
                     switch phase {
@@ -67,6 +69,8 @@ public struct ItemImageView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: contentMode)
+                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                            .clipped()
                     case .failure:
                         placeholderView
                     @unknown default:

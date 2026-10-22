@@ -18,7 +18,7 @@ public struct VaultView: View {
     @State private var sortOption: SortOption = .priceHighToLow
 
     // Multi-Select & Bulk Delete
-    @State private var isSelecting = false
+    @AppStorage("vault_is_selecting") private var isSelecting = false
     @State private var selectedItemIds: Set<UUID> = []
     @State private var showDeleteConfirmation = false
     @State private var toastMessage: String? = nil
@@ -27,7 +27,7 @@ public struct VaultView: View {
     @State private var selectedDetailItem: WardrobeItem? = nil
     @State private var itemToEdit: WardrobeItem? = nil
     @State private var showAddItemSheet = false
-    @State private var showWebImportSheet = false
+    @AppStorage("vault_show_import") private var showWebImportSheet = false
 
     public init(dataStore: DataStore) {
         self.dataStore = dataStore
@@ -109,8 +109,8 @@ public struct VaultView: View {
                         } else {
                             LazyVGrid(
                                 columns: [
-                                    GridItem(.flexible(), spacing: 14),
-                                    GridItem(.flexible(), spacing: 14)
+                                    GridItem(.flexible(minimum: 140, maximum: 200), spacing: 14),
+                                    GridItem(.flexible(minimum: 140, maximum: 200), spacing: 14)
                                 ],
                                 spacing: 16
                             ) {
@@ -173,19 +173,19 @@ public struct VaultView: View {
                         }
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "shield.fill")
-                                    .font(.system(size: 15, weight: .black))
+                            HStack(spacing: 7) {
+                                Image(systemName: "gauge.with.dots.needle.bottom.50percent")
+                                    .font(.system(size: 15, weight: .bold))
                                     .foregroundStyle(LuxuryTheme.accentAmber)
 
-                                Text("ATELIER")
-                                    .font(.system(size: 16, weight: .black, design: .rounded))
-                                    .tracking(2.0)
+                                Text("COCKPIT")
+                                    .font(.system(size: 15, weight: .black, design: .rounded))
+                                    .tracking(1.8)
                                     .foregroundStyle(LuxuryTheme.textPrimary)
 
                                 Text("MEN")
-                                    .font(.system(size: 16, weight: .black, design: .rounded))
-                                    .tracking(2.0)
+                                    .font(.system(size: 13, weight: .black, design: .rounded))
+                                    .tracking(1.4)
                                     .foregroundStyle(LuxuryTheme.accentAmber)
                             }
                         }
@@ -320,6 +320,11 @@ public struct VaultView: View {
                     } else {
                         showToast("Piece already in Vault — duplicates ignored & merged")
                     }
+                }
+            }
+            .onAppear {
+                if isSelecting && selectedItemIds.isEmpty {
+                    selectedItemIds = Set(dataStore.items.prefix(3).map { $0.id })
                 }
             }
         }

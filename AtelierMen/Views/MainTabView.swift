@@ -2,11 +2,10 @@ import SwiftUI
 
 public struct MainTabView: View {
     @ObservedObject var dataStore: DataStore
-    @State private var selectedTab: Int = 0
+    @AppStorage("app_selected_tab") private var selectedTab: Int = 0
 
     public init(dataStore: DataStore, initialTab: Int = 0) {
         self.dataStore = dataStore
-        self._selectedTab = State(initialValue: initialTab)
     }
 
     public var body: some View {
