@@ -11,8 +11,16 @@ public final class DataStore: ObservableObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("wardrobe_items.json")
     }
 
+    private var backupItemsFileUrl: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("wardrobe_items_backup.json")
+    }
+
     private var wishlistFileUrl: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("wishlist_items.json")
+    }
+
+    private var backupWishlistFileUrl: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("wishlist_items_backup.json")
     }
 
     private var looksFileUrl: URL {
@@ -83,19 +91,12 @@ public final class DataStore: ObservableObject {
             let exName = existing.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let exBrand = existing.brand.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-            // 1. Exact match on clean name & brand
-            if exName == cleanName && exBrand == cleanBrand {
+            // 1. Exact match on clean name, brand & category
+            if exName == cleanName && exBrand == cleanBrand && existing.category == item.category {
                 return true
             }
 
-            // 2. Name contains or overlap with same brand & category
-            if !cleanBrand.isEmpty && exBrand == cleanBrand && existing.category == item.category {
-                if exName.contains(cleanName) || cleanName.contains(exName) {
-                    return true
-                }
-            }
-
-            // 3. Same source URL in notes if imported from web
+            // 2. Same source URL in notes if imported from web
             if !item.notes.isEmpty && !existing.notes.isEmpty {
                 if let url1 = extractFirstUrl(from: item.notes),
                    let url2 = extractFirstUrl(from: existing.notes),
@@ -199,10 +200,7 @@ public final class DataStore: ObservableObject {
             if existing.id == item.id { return false }
             let exName = existing.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let exBrand = existing.brand.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if exName == cleanName && exBrand == cleanBrand { return true }
-            if !cleanBrand.isEmpty && exBrand == cleanBrand && (exName.contains(cleanName) || cleanName.contains(exName)) {
-                return true
-            }
+            if exName == cleanName && exBrand == cleanBrand && existing.category == item.category { return true }
             if !item.storeUrl.isEmpty && item.storeUrl == existing.storeUrl {
                 return true
             }
@@ -344,45 +342,57 @@ public final class DataStore: ObservableObject {
     // MARK: - Persistence
     public func saveItems() {
         if let data = try? JSONEncoder().encode(items) {
-            try? data.write(to: itemsFileUrl)
+            try? data.write(to: itemsFileUrl, options: .atomic)
+            try? data.write(to: backupItemsFileUrl, options: .atomic)
         }
     }
 
     public func saveWishlist() {
         if let data = try? JSONEncoder().encode(wishlistItems) {
-            try? data.write(to: wishlistFileUrl)
+            try? data.write(to: wishlistFileUrl, options: .atomic)
+            try? data.write(to: backupWishlistFileUrl, options: .atomic)
         }
     }
 
     public func saveLooks() {
         if let data = try? JSONEncoder().encode(looks) {
-            try? data.write(to: looksFileUrl)
+            try? data.write(to: looksFileUrl, options: .atomic)
         }
     }
 
     public func saveTrips() {
         if let data = try? JSONEncoder().encode(tripPlans) {
-            try? data.write(to: tripsFileUrl)
+            try? data.write(to: tripsFileUrl, options: .atomic)
         }
     }
 
     private func loadData() {
-        // Items
+        // Items: try primary, then backup, only fall back to seeds if file literally does not exist
         if let data = try? Data(contentsOf: itemsFileUrl),
            let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: data),
-           loaded.contains(where: { $0.category == .sportswear }) {
+           !loaded.isEmpty {
             self.items = loaded
-        } else {
+        } else if let bData = try? Data(contentsOf: backupItemsFileUrl),
+                  let loaded = try? JSONDecoder().decode([WardrobeItem].self, from: bData),
+                  !loaded.isEmpty {
+            self.items = loaded
+            saveItems()
+        } else if !FileManager.default.fileExists(atPath: itemsFileUrl.path) {
             self.items = SeedData.initialItems
             saveItems()
         }
 
-        // Wishlist
+        // Wishlist: try primary, then backup, only seed if file does not exist
         if let data = try? Data(contentsOf: wishlistFileUrl),
            let loaded = try? JSONDecoder().decode([WishlistItem].self, from: data),
-           loaded.contains(where: { $0.category == .sportswear }) {
+           !loaded.isEmpty {
             self.wishlistItems = loaded
-        } else {
+        } else if let bData = try? Data(contentsOf: backupWishlistFileUrl),
+                  let loaded = try? JSONDecoder().decode([WishlistItem].self, from: bData),
+                  !loaded.isEmpty {
+            self.wishlistItems = loaded
+            saveWishlist()
+        } else if !FileManager.default.fileExists(atPath: wishlistFileUrl.path) {
             self.wishlistItems = SeedData.initialWishlist
             saveWishlist()
         }
@@ -404,10 +414,6 @@ public final class DataStore: ObservableObject {
             self.tripPlans = SeedData.initialTrips(from: self.items)
             saveTrips()
         }
-
-        // Automatically clean and merge any duplicate pieces on load
-        removeDuplicates()
-        removeWishlistDuplicates()
     }
 }
 
