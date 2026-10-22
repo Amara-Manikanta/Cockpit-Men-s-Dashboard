@@ -197,14 +197,52 @@ public struct WebImportSheet: View {
                         .foregroundStyle(LuxuryTheme.gold)
                 }
 
-                HStack {
-                    Text(data.category.rawValue)
-                    if !data.subcategory.isEmpty {
-                        Text("• " + data.subcategory)
+                // Interactive Category & Subcategory Selector (User in full control)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("CATEGORY (TAP TO CHANGE)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(LuxuryTheme.textTertiary)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(ItemCategory.allCases, id: \.self) { cat in
+                                Button(action: {
+                                    importedData?.category = cat
+                                    importedData?.subcategory = cat.defaultSubcategories.first ?? ""
+                                    if cat != .shoes { importedData?.shoeSize = "" }
+                                    if cat != .clothes && cat != .sportswear { importedData?.size = "" }
+                                }) {
+                                    Text(cat.rawValue)
+                                        .font(.system(size: 11, weight: data.category == cat ? .bold : .medium))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(data.category == cat ? cat.accentColor : LuxuryTheme.secondaryBackground)
+                                        .foregroundStyle(data.category == cat ? Color.black : LuxuryTheme.textSecondary)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(data.category.defaultSubcategories, id: \.self) { sub in
+                                Button(action: {
+                                    importedData?.subcategory = sub
+                                }) {
+                                    Text(sub)
+                                        .font(.system(size: 10, weight: data.subcategory == sub ? .bold : .regular))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(data.subcategory == sub ? LuxuryTheme.cardBorder : LuxuryTheme.background)
+                                        .foregroundStyle(data.subcategory == sub ? LuxuryTheme.gold : LuxuryTheme.textTertiary)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
                     }
                 }
-                .font(.system(size: 12))
-                .foregroundStyle(LuxuryTheme.textSecondary)
+                .padding(.top, 4)
             }
 
             Button(action: {

@@ -392,21 +392,42 @@ public final class WebProductImporter {
 
     // MARK: - Category Inference (Across all 6 categories!)
     private func assignCategoryAndSubcategory(for text: String, result: inout ImportedProductData) {
-        let shoeKeywords = ["shoe", "sneaker", "boot", "loafer", "oxford", "derby", "footwear", "sandal", "trainer", "slides", "downshifter"]
+        let shoeKeywords = ["shoe", "sneaker", "boot", "loafer", "oxford", "derby", "footwear", "trainer", "slides", "downshifter"]
         let bagKeywords = ["bag", "backpack", "briefcase", "duffel", "duffle", "luggage", "suitcase", "sling", "tote", "messenger", "dopp kit", "carry-on", "pouch"]
         let groomingKeywords = [
             "cologne", "perfume", "fragrance", "serum", "moisturizer", "skincare", "cream",
             "shave", "razor", "pomade", "beard", "eau de parfum", "grooming", "lotion", "cleanser",
-            "tongue", "cleaner", "scraper", "oral", "dental", "toothbrush", "toothpaste", "floss",
-            "hygiene", "trimmer", "clipper", "comb", "tweezer", "nail", "soap", "body wash",
-            "deodorant", "shampoo", "conditioner", "bath"
+            "face", "sandalwood", "chandan", "tongue", "cleaner", "scraper", "oral", "dental",
+            "toothbrush", "toothpaste", "floss", "hygiene", "trimmer", "clipper", "comb",
+            "tweezer", "nail", "soap", "body wash", "deodorant", "shampoo", "conditioner", "bath"
         ]
         let accessoryKeywords = ["wallet", "cardholder", "belt", "sunglass", "glasses", "eyewear", "cufflink", "tie clip", "watch winder", "pocket square", "scarf", "hat", "cap"]
         let techKeywords = ["laptop", "phone", "macbook", "headphone", "audio", "earbuds", "watch", "camera", "tablet", "gadget", "charger", "display", "ipad", "airpods"]
         let sportswearKeywords = ["sportswear", "activewear", "gym", "workout", "training", "dri-fit", "aeroready", "tracksuit", "jogger", "compression", "jersey", "rashguard", "athletic", "legging", "running shorts", "running tee", "sports tee", "gym tee", "gym shorts"]
         let clothesKeywords = ["shirt", "t-shirt", "tshirt", "tee", "polo", "suit", "blazer", "jacket", "coat", "trouser", "pant", "chino", "denim", "jean", "knit", "sweater", "cardigan", "hoodie", "overcoat", "kurta", "sherwani", "waistcoat"]
 
-        if shoeKeywords.contains(where: { text.contains($0) }) {
+        let hasGroomingWord = groomingKeywords.contains(where: { text.contains($0) })
+        let hasShoeWord = (shoeKeywords.contains(where: { text.contains($0) }) || (text.contains("sandal") && !text.contains("sandalwood") && !text.contains("cream") && !text.contains("face") && !text.contains("soap") && !text.contains("lotion"))) && !hasGroomingWord
+
+        if hasGroomingWord {
+            result.category = .grooming
+            result.shoeSize = ""
+            result.size = ""
+            if text.contains("cologne") || text.contains("perfume") || text.contains("fragrance") || text.contains("parfum") {
+                result.subcategory = "Fragrances & Colognes"
+            } else if text.contains("serum") || text.contains("skincare") || text.contains("cream") || text.contains("moisturizer") || text.contains("face") || text.contains("lotion") {
+                result.subcategory = "Face & Skincare Serums"
+            } else if text.contains("shave") || text.contains("razor") || text.contains("beard") {
+                result.subcategory = "Shaving & Beard Care"
+            } else if text.contains("tongue") || text.contains("scraper") || text.contains("dental") || text.contains("oral") || text.contains("toothbrush") || text.contains("brush") || text.contains("floss") || text.contains("trimmer") || text.contains("clipper") || text.contains("comb") || text.contains("cleaner") || text.contains("nail") || text.contains("tweezer") {
+                result.subcategory = "Grooming Tools & Trimmers"
+            } else if text.contains("soap") || text.contains("shower") || text.contains("bath") || text.contains("deodorant") || text.contains("body wash") || text.contains("shampoo") {
+                result.subcategory = "Body & Shower Essentials"
+            } else {
+                result.subcategory = "Hair Styling & Pomades"
+            }
+            result.volumeSize = "Standard Size"
+        } else if hasShoeWord {
             result.category = .shoes
             if text.contains("sneaker") || text.contains("trainer") || text.contains("running") || text.contains("downshifter") {
                 result.subcategory = "Sneakers & Streetwear"
@@ -424,6 +445,7 @@ public final class WebProductImporter {
             }
         } else if bagKeywords.contains(where: { text.contains($0) }) {
             result.category = .bags
+            result.shoeSize = ""
             if text.contains("briefcase") || text.contains("work") {
                 result.subcategory = "Briefcases & Work Bags"
             } else if text.contains("backpack") {
@@ -436,24 +458,9 @@ public final class WebProductImporter {
                 result.subcategory = "Totes & Messengers"
             }
             result.bagCapacity = "Standard Capacity"
-        } else if groomingKeywords.contains(where: { text.contains($0) }) {
-            result.category = .grooming
-            if text.contains("cologne") || text.contains("perfume") || text.contains("fragrance") || text.contains("parfum") {
-                result.subcategory = "Fragrances & Colognes"
-            } else if text.contains("serum") || text.contains("skincare") || text.contains("cream") || text.contains("moisturizer") {
-                result.subcategory = "Face & Skincare Serums"
-            } else if text.contains("shave") || text.contains("razor") || text.contains("beard") {
-                result.subcategory = "Shaving & Beard Care"
-            } else if text.contains("tongue") || text.contains("scraper") || text.contains("dental") || text.contains("oral") || text.contains("toothbrush") || text.contains("brush") || text.contains("floss") || text.contains("trimmer") || text.contains("clipper") || text.contains("comb") || text.contains("cleaner") || text.contains("nail") || text.contains("tweezer") {
-                result.subcategory = "Grooming Tools & Trimmers"
-            } else if text.contains("soap") || text.contains("shower") || text.contains("bath") || text.contains("deodorant") || text.contains("body wash") || text.contains("shampoo") {
-                result.subcategory = "Body & Shower Essentials"
-            } else {
-                result.subcategory = "Hair Styling & Pomades"
-            }
-            result.volumeSize = "Standard Size"
         } else if accessoryKeywords.contains(where: { text.contains($0) }) {
             result.category = .accessories
+            result.shoeSize = ""
             if text.contains("wallet") || text.contains("cardholder") {
                 result.subcategory = "Wallets & Cardholders"
             } else if text.contains("belt") {
@@ -468,6 +475,7 @@ public final class WebProductImporter {
             result.accessoryMaterial = "Premium Material"
         } else if techKeywords.contains(where: { text.contains($0) }) {
             result.category = .electronics
+            result.shoeSize = ""
             if text.contains("headphone") || text.contains("audio") || text.contains("earbuds") {
                 result.subcategory = "Audio & Acoustics"
             } else if text.contains("watch") {
@@ -480,6 +488,7 @@ public final class WebProductImporter {
             result.modelSpecs = result.fabricMaterial.isEmpty ? "Flagship Edition" : result.fabricMaterial
         } else if sportswearKeywords.contains(where: { text.contains($0) }) {
             result.category = .sportswear
+            result.shoeSize = ""
             if text.contains("running") || text.contains("marathon") {
                 result.subcategory = "Running & Marathon Gear"
             } else if text.contains("gym") || text.contains("workout") || text.contains("training") {
@@ -497,6 +506,7 @@ public final class WebProductImporter {
             }
         } else if clothesKeywords.contains(where: { text.contains($0) }) {
             result.category = .clothes
+            result.shoeSize = ""
             if text.contains("suit") || text.contains("blazer") {
                 result.subcategory = "Suits & Blazers"
             } else if text.contains("shirt") || text.contains("polo") {
@@ -511,7 +521,8 @@ public final class WebProductImporter {
                 result.subcategory = "T-Shirts & Knits"
             }
         } else {
-            // Unrecognized fallback: Do not falsely assign to T-Shirts & Knits!
+            // Unrecognized fallback: Do not falsely assign to T-Shirts & Knits or Shoes!
+            result.shoeSize = ""
             if text.contains("cleaner") || text.contains("tool") || text.contains("hygiene") || text.contains("care") {
                 result.category = .grooming
                 result.subcategory = "Grooming Tools & Trimmers"
