@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 public enum SortOption: String, CaseIterable, Identifiable {
     case newest = "Newest Added"
@@ -28,6 +29,11 @@ public struct VaultView: View {
     @State private var itemToEdit: WardrobeItem? = nil
     @State private var showAddItemSheet = false
     @AppStorage("vault_show_import") private var showWebImportSheet = false
+
+    // Backup & Restore
+    @State private var backupUrlToShare: URL? = nil
+    @State private var showShareSheet = false
+    @State private var showRestorePicker = false
 
     public init(dataStore: DataStore) {
         self.dataStore = dataStore
@@ -211,6 +217,13 @@ public struct VaultView: View {
                                 }
 
                                 Menu {
+                                    Button(action: { exportBackup() }) {
+                                        Label("Export Backup / Save to Files", systemImage: "square.and.arrow.up")
+                                    }
+                                    Button(action: { showRestorePicker = true }) {
+                                        Label("Restore from Backup File", systemImage: "square.and.arrow.down")
+                                    }
+                                    Divider()
                                     Button(action: { cleanDuplicatesAction() }) {
                                         Label("Remove Duplicates", systemImage: "sparkles")
                                     }
@@ -320,6 +333,30 @@ public struct VaultView: View {
                     } else {
                         showToast("Piece already in Vault — duplicates ignored & merged")
                     }
+                }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let url = backupUrlToShare {
+                    ShareActivityView(activityItems: [url])
+                }
+            }
+            .fileImporter(
+                isPresented: $showRestorePicker,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let selectedUrl = urls.first {
+                        if let res = dataStore.restoreFromBackup(fileUrl: selectedUrl) {
+                            showToast("Restored \(res.items) pieces & \(res.wishlist) wishlist items!")
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        } else {
+                            showToast("Could not parse valid AtelierMen backup")
+                        }
+                    }
+                case .failure(let err):
+                    showToast("Import cancelled: \(err.localizedDescription)")
                 }
             }
             .onAppear {
@@ -716,4 +753,26 @@ public struct VaultView: View {
             .shadow(color: LuxuryTheme.gold.opacity(0.35), radius: 10, x: 0, y: 5)
         }
     }
+
+    // MARK: - Backup & Restore
+    private func exportBackup() {
+        if let url = dataStore.generateBackupFile() {
+            backupUrlToShare = url
+            showShareSheet = true
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } else {
+            showToast("Failed to generate backup file")
+        }
+    }
+}
+
+// MARK: - UIActivityViewController Wrapper
+private struct ShareActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

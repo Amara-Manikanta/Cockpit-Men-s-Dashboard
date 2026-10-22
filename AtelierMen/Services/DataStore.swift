@@ -458,6 +458,63 @@ public final class DataStore: ObservableObject {
             saveTrips()
         }
     }
+
+    // MARK: - Export & Restore Backup
+    public func generateBackupFile() -> URL? {
+        let backup = AtelierBackup(items: items, wishlistItems: wishlistItems, looks: looks, tripPlans: tripPlans)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(backup) else { return nil }
+
+        let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent("AtelierMen_Backup_\(Int(Date().timeIntervalSince1970)).json")
+        do {
+            try data.write(to: tempUrl)
+            return tempUrl
+        } catch {
+            return nil
+        }
+    }
+
+    public func restoreFromBackup(fileUrl: URL) -> (items: Int, wishlist: Int)? {
+        let shouldStopAccessing = fileUrl.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccessing { fileUrl.stopAccessingSecurityScopedResource() }
+        }
+
+        guard let data = try? Data(contentsOf: fileUrl) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        if let backup = try? decoder.decode(AtelierBackup.self, from: data) {
+            self.items = backup.items
+            self.wishlistItems = backup.wishlistItems
+            self.looks = backup.looks
+            self.tripPlans = backup.tripPlans
+            saveItems()
+            saveWishlist()
+            saveLooks()
+            saveTrips()
+            return (backup.items.count, backup.wishlistItems.count)
+        }
+
+        if let rawItems = try? decoder.decode([WardrobeItem].self, from: data) {
+            self.items = rawItems
+            saveItems()
+            return (rawItems.count, 0)
+        }
+
+        return nil
+    }
+}
+
+public struct AtelierBackup: Codable {
+    public var version: Int = 1
+    public var exportDate: Date = Date()
+    public var items: [WardrobeItem]
+    public var wishlistItems: [WishlistItem]
+    public var looks: [CuratedLook]
+    public var tripPlans: [TripPlan]
 }
 
 // MARK: - Seed Data
