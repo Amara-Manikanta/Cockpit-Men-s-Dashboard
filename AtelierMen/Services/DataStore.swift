@@ -2,6 +2,8 @@ import SwiftUI
 
 @MainActor
 public final class DataStore: ObservableObject {
+    public static private(set) weak var shared: DataStore?
+
     @Published public var items: [WardrobeItem] = []
     @Published public var wishlistItems: [WishlistItem] = []
     @Published public var looks: [CuratedLook] = []
@@ -32,6 +34,7 @@ public final class DataStore: ObservableObject {
     }
 
     public init() {
+        DataStore.shared = self
         loadData()
     }
 
@@ -526,22 +529,79 @@ public final class DataStore: ObservableObject {
 
     // MARK: - Export & Restore Backup
     public func generateBackupFile() -> URL? {
-        let backup = AtelierBackup(items: items, wishlistItems: wishlistItems, looks: looks, tripPlans: tripPlans)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(backup) else { return nil }
+        AtelierBackupManager.shared.generateMenBackup(menStore: self)
+    }
 
-        let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent("AtelierMen_Backup_\(Int(Date().timeIntervalSince1970)).json")
-        do {
-            try data.write(to: tempUrl)
-            return tempUrl
-        } catch {
-            return nil
+    public func restoreItems(
+        _ newItems: [WardrobeItem],
+        wishlist: [WishlistItem],
+        looks newLooks: [CuratedLook],
+        trips newTrips: [TripPlan],
+        mode: BackupImportMode
+    ) -> (items: Int, wishlist: Int) {
+        if mode == .replace {
+            self.items = newItems
+            self.wishlistItems = wishlist
+            if !newLooks.isEmpty { self.looks = newLooks }
+            if !newTrips.isEmpty { self.tripPlans = newTrips }
+            saveItems()
+            saveWishlist()
+            saveLooks()
+            saveTrips()
+            return (newItems.count, wishlist.count)
+        } else {
+            // Merge mode
+            var addedItems = 0
+            for item in newItems {
+                if let existingIdx = self.items.firstIndex(where: { $0.id == item.id || ($0.name.lowercased() == item.name.lowercased() && $0.brand.lowercased() == item.brand.lowercased()) }) {
+                    var current = self.items[existingIdx]
+                    if item.timesWorn > current.timesWorn {
+                        current.timesWorn = item.timesWorn
+                    }
+                    if current.garmentCondition == nil && item.garmentCondition != nil {
+                        current.garmentCondition = item.garmentCondition
+                    }
+                    if current.qualityRating == 0 && item.qualityRating > 0 {
+                        current.qualityRating = item.qualityRating
+                        current.durabilityRating = item.durabilityRating
+                        current.reviewNotes = item.reviewNotes
+                    }
+                    self.items[existingIdx] = current
+                } else {
+                    self.items.append(item)
+                    addedItems += 1
+                }
+            }
+
+            var addedWishlist = 0
+            for w in wishlist {
+                if !self.wishlistItems.contains(where: { $0.id == w.id || ($0.name.lowercased() == w.name.lowercased() && $0.brand.lowercased() == w.brand.lowercased()) }) {
+                    self.wishlistItems.append(w)
+                    addedWishlist += 1
+                }
+            }
+
+            for l in newLooks {
+                if !self.looks.contains(where: { $0.id == l.id || $0.title.lowercased() == l.title.lowercased() }) {
+                    self.looks.append(l)
+                }
+            }
+
+            for t in newTrips {
+                if !self.tripPlans.contains(where: { $0.id == t.id || $0.destination.lowercased() == t.destination.lowercased() }) {
+                    self.tripPlans.append(t)
+                }
+            }
+
+            saveItems()
+            saveWishlist()
+            saveLooks()
+            saveTrips()
+            return (addedItems, addedWishlist)
         }
     }
 
-    public func restoreFromBackup(fileUrl: URL) -> (items: Int, wishlist: Int)? {
+    public func restoreFromBackup(fileUrl: URL, mode: BackupImportMode = .merge) -> (items: Int, wishlist: Int)? {
         let shouldStopAccessing = fileUrl.startAccessingSecurityScopedResource()
         defer {
             if shouldStopAccessing { fileUrl.stopAccessingSecurityScopedResource() }
@@ -552,34 +612,19 @@ public final class DataStore: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
 
         if let backup = try? decoder.decode(AtelierBackup.self, from: data) {
-            self.items = backup.items
-            self.wishlistItems = backup.wishlistItems
-            self.looks = backup.looks
-            self.tripPlans = backup.tripPlans
-            saveItems()
-            saveWishlist()
-            saveLooks()
-            saveTrips()
-            return (backup.items.count, backup.wishlistItems.count)
+            return restoreItems(backup.items, wishlist: backup.wishlistItems, looks: backup.looks, trips: backup.tripPlans, mode: mode)
+        }
+
+        if let unified = try? decoder.decode(AtelierUnifiedBackup.self, from: data), let menItems = unified.menItems {
+            return restoreItems(menItems, wishlist: unified.menWishlist ?? [], looks: unified.menLooks ?? [], trips: unified.menTripPlans ?? [], mode: mode)
         }
 
         if let rawItems = try? decoder.decode([WardrobeItem].self, from: data) {
-            self.items = rawItems
-            saveItems()
-            return (rawItems.count, 0)
+            return restoreItems(rawItems, wishlist: [], looks: [], trips: [], mode: mode)
         }
 
         return nil
     }
-}
-
-public struct AtelierBackup: Codable {
-    public var version: Int = 1
-    public var exportDate: Date = Date()
-    public var items: [WardrobeItem]
-    public var wishlistItems: [WishlistItem]
-    public var looks: [CuratedLook]
-    public var tripPlans: [TripPlan]
 }
 
 // MARK: - Seed Data

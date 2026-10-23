@@ -2,6 +2,8 @@ import SwiftUI
 
 @MainActor
 public final class WomenDataStore: ObservableObject {
+    public static private(set) weak var shared: WomenDataStore?
+
     @Published public var items: [WomenWardrobeItem] = []
     @Published public var wishlistItems: [WomenWishlistItem] = []
     @Published public var looks: [WomenCuratedLook] = []
@@ -32,6 +34,7 @@ public final class WomenDataStore: ObservableObject {
     }
 
     public init() {
+        WomenDataStore.shared = self
         loadData()
     }
 
@@ -349,6 +352,105 @@ public final class WomenDataStore: ObservableObject {
             self.trips = WomenSeedData.initialTrips(from: self.items)
             saveTrips()
         }
+    }
+
+    // MARK: - Export & Restore Backup
+    public func generateBackupFile() -> URL? {
+        AtelierBackupManager.shared.generateWomenBackup(womenStore: self)
+    }
+
+    public func restoreItems(
+        _ newItems: [WomenWardrobeItem],
+        wishlist: [WomenWishlistItem],
+        looks newLooks: [WomenCuratedLook],
+        trips newTrips: [WomenTripPlan],
+        mode: BackupImportMode
+    ) -> (items: Int, wishlist: Int) {
+        if mode == .replace {
+            self.items = newItems
+            self.wishlistItems = wishlist
+            if !newLooks.isEmpty { self.looks = newLooks }
+            if !newTrips.isEmpty { self.trips = newTrips }
+            saveItems()
+            saveWishlist()
+            saveLooks()
+            saveTrips()
+            return (newItems.count, wishlist.count)
+        } else {
+            // Merge mode
+            var addedItems = 0
+            for item in newItems {
+                if let existingIdx = self.items.firstIndex(where: { $0.id == item.id || ($0.title.lowercased() == item.title.lowercased() && $0.brand.lowercased() == item.brand.lowercased()) }) {
+                    var current = self.items[existingIdx]
+                    if item.timesWorn > current.timesWorn {
+                        current.timesWorn = item.timesWorn
+                    }
+                    if current.garmentCondition == nil && item.garmentCondition != nil {
+                        current.garmentCondition = item.garmentCondition
+                    }
+                    if current.qualityRating == 0 && item.qualityRating > 0 {
+                        current.qualityRating = item.qualityRating
+                        current.durabilityRating = item.durabilityRating
+                        current.reviewNotes = item.reviewNotes
+                    }
+                    self.items[existingIdx] = current
+                } else {
+                    self.items.append(item)
+                    addedItems += 1
+                }
+            }
+
+            var addedWishlist = 0
+            for w in wishlist {
+                if !self.wishlistItems.contains(where: { $0.id == w.id || ($0.title.lowercased() == w.title.lowercased() && $0.brand.lowercased() == w.brand.lowercased()) }) {
+                    self.wishlistItems.append(w)
+                    addedWishlist += 1
+                }
+            }
+
+            for l in newLooks {
+                if !self.looks.contains(where: { $0.id == l.id || $0.name.lowercased() == l.name.lowercased() }) {
+                    self.looks.append(l)
+                }
+            }
+
+            for t in newTrips {
+                if !self.trips.contains(where: { $0.id == t.id || $0.destination.lowercased() == t.destination.lowercased() }) {
+                    self.trips.append(t)
+                }
+            }
+
+            saveItems()
+            saveWishlist()
+            saveLooks()
+            saveTrips()
+            return (addedItems, addedWishlist)
+        }
+    }
+
+    public func restoreFromBackup(fileUrl: URL, mode: BackupImportMode = .merge) -> (items: Int, wishlist: Int)? {
+        let shouldStopAccessing = fileUrl.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccessing { fileUrl.stopAccessingSecurityScopedResource() }
+        }
+
+        guard let data = try? Data(contentsOf: fileUrl) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        if let backup = try? decoder.decode(WomenAtelierBackup.self, from: data) {
+            return restoreItems(backup.items, wishlist: backup.wishlistItems, looks: backup.looks, trips: backup.trips, mode: mode)
+        }
+
+        if let unified = try? decoder.decode(AtelierUnifiedBackup.self, from: data), let womenItems = unified.womenItems {
+            return restoreItems(womenItems, wishlist: unified.womenWishlist ?? [], looks: unified.womenLooks ?? [], trips: unified.womenTrips ?? [], mode: mode)
+        }
+
+        if let rawItems = try? decoder.decode([WomenWardrobeItem].self, from: data) {
+            return restoreItems(rawItems, wishlist: [], looks: [], trips: [], mode: mode)
+        }
+
+        return nil
     }
 }
 

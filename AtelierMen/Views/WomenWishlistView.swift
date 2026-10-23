@@ -12,6 +12,7 @@ public struct WomenWishlistView: View {
 
     @State private var selectedDetailItem: WomenWishlistItem? = nil
     @State private var itemToEdit: WomenWishlistItem? = nil
+    @State private var showDataTransferSheet = false
 
     // Multi-Select
     @State private var isSelecting = false
@@ -137,6 +138,17 @@ public struct WomenWishlistView: View {
                                         .font(.system(size: 20))
                                         .foregroundStyle(WomenLuxuryTheme.roseGold)
                                 }
+
+                                Menu {
+                                    Button(action: { showDataTransferSheet = true }) {
+                                        Label("Data Backup & Transfer 💾", systemImage: "arrow.up.arrow.down.circle")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(WomenLuxuryTheme.roseGold)
+                                        .padding(4)
+                                }
                             }
                         }
                     }
@@ -199,6 +211,13 @@ public struct WomenWishlistView: View {
             }
             .sheet(item: $itemToMoveToBoutique) { item in
                 moveToBoutiqueSheet(item: item)
+            }
+            .sheet(isPresented: $showDataTransferSheet) {
+                AtelierDataTransferSheet(
+                    menStore: DataStore.shared ?? DataStore(),
+                    womenStore: womenDataStore,
+                    isWomenSection: true
+                )
             }
         }
     }

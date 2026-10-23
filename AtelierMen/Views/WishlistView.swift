@@ -14,6 +14,7 @@ public struct WishlistView: View {
     // Detail & Edit Sheets
     @State private var selectedDetailItem: WishlistItem? = nil
     @State private var itemToEdit: WishlistItem? = nil
+    @State private var showDataTransferSheet = false
 
     // Multi-Select & Bulk Delete
     @State private var isSelecting = false
@@ -137,6 +138,10 @@ public struct WishlistView: View {
                                 }
 
                                 Menu {
+                                    Button(action: { showDataTransferSheet = true }) {
+                                        Label("Data Backup & Transfer 💾", systemImage: "arrow.up.arrow.down.circle")
+                                    }
+                                    Divider()
                                     Button(action: { showScannerSheet = true }) {
                                         Label("Scan Barcode / QR", systemImage: "barcode.viewfinder")
                                     }
@@ -253,6 +258,13 @@ public struct WishlistView: View {
             }
             .sheet(item: $itemToMoveToVault) { item in
                 moveToVaultSheet(item: item)
+            }
+            .sheet(isPresented: $showDataTransferSheet) {
+                AtelierDataTransferSheet(
+                    menStore: dataStore,
+                    womenStore: WomenDataStore.shared ?? WomenDataStore(),
+                    isWomenSection: false
+                )
             }
         }
     }

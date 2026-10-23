@@ -21,6 +21,12 @@ public struct WomenBoutiqueView: View {
     @State private var showAddItemSheet = false
     @State private var showLogTodaySheet = false
 
+    // Backup & Restore
+    @State private var backupUrlToShare: URL? = nil
+    @State private var showShareSheet = false
+    @State private var showRestorePicker = false
+    @State private var showDataTransferSheet = false
+
     public init(womenDataStore: WomenDataStore, activeGenderProfile: Binding<String>) {
         self.womenDataStore = womenDataStore
         self._activeGenderProfile = activeGenderProfile
@@ -191,6 +197,16 @@ public struct WomenBoutiqueView: View {
                                         Label("What Did You Wear Today? ✨", systemImage: "sparkles")
                                     }
                                     Divider()
+                                    Button(action: { showDataTransferSheet = true }) {
+                                        Label("Data Backup & Transfer 💾", systemImage: "arrow.up.arrow.down.circle")
+                                    }
+                                    Button(action: { exportBackup() }) {
+                                        Label("Quick Export Boutique Data", systemImage: "square.and.arrow.up")
+                                    }
+                                    Button(action: { showRestorePicker = true }) {
+                                        Label("Restore from Backup File", systemImage: "square.and.arrow.down")
+                                    }
+                                    Divider()
                                     Button(action: {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                             activeGenderProfile = "male"
@@ -280,6 +296,45 @@ public struct WomenBoutiqueView: View {
             .sheet(isPresented: $showLogTodaySheet) {
                 LogTodayOutfitSheet(womenDataStore: womenDataStore) { count in
                     showToast("Logged \(count) pieces styled today! ✨")
+                }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let url = backupUrlToShare {
+                    ShareActivityView(activityItems: [url])
+                }
+            }
+            .sheet(isPresented: $showDataTransferSheet) {
+                AtelierDataTransferSheet(
+                    menStore: DataStore.shared ?? DataStore(),
+                    womenStore: womenDataStore,
+                    isWomenSection: true
+                )
+            }
+            .fileImporter(
+                isPresented: $showRestorePicker,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let selectedUrl = urls.first {
+                        let res = AtelierBackupManager.shared.importBackup(
+                            from: selectedUrl,
+                            menStore: DataStore.shared ?? DataStore(),
+                            womenStore: womenDataStore,
+                            mode: .merge
+                        )
+                        switch res {
+                        case .success(let summary):
+                            showToast("Imported \(summary.detailedMessage)!")
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        case .failure(let err):
+                            showToast(err.localizedDescription)
+                            UINotificationFeedbackGenerator().notificationOccurred(.error)
+                        }
+                    }
+                case .failure(let err):
+                    showToast("Import cancelled: \(err.localizedDescription)")
                 }
             }
         }
@@ -864,6 +919,17 @@ public struct WomenBoutiqueView: View {
                 .foregroundStyle(WomenLuxuryTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 30)
+        }
+    }
+
+    // MARK: - Backup & Restore
+    private func exportBackup() {
+        if let url = womenDataStore.generateBackupFile() {
+            backupUrlToShare = url
+            showShareSheet = true
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } else {
+            showToast("Failed to generate backup file")
         }
     }
 

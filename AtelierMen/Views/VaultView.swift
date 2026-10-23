@@ -41,6 +41,7 @@ public struct VaultView: View {
     @State private var backupUrlToShare: URL? = nil
     @State private var showShareSheet = false
     @State private var showRestorePicker = false
+    @State private var showDataTransferSheet = false
 
     var activeGenderProfile: Binding<String>? = nil
 
@@ -302,8 +303,11 @@ public struct VaultView: View {
                                         Label("What Did You Wear Today? ✨", systemImage: "sparkles")
                                     }
                                     Divider()
+                                    Button(action: { showDataTransferSheet = true }) {
+                                        Label("Data Backup & Transfer 💾", systemImage: "arrow.up.arrow.down.circle")
+                                    }
                                     Button(action: { exportBackup() }) {
-                                        Label("Export Backup / Save to Files", systemImage: "square.and.arrow.up")
+                                        Label("Quick Export Vault Data", systemImage: "square.and.arrow.up")
                                     }
                                     Button(action: { showRestorePicker = true }) {
                                         Label("Restore from Backup File", systemImage: "square.and.arrow.down")
@@ -450,6 +454,13 @@ public struct VaultView: View {
                     ShareActivityView(activityItems: [url])
                 }
             }
+            .sheet(isPresented: $showDataTransferSheet) {
+                AtelierDataTransferSheet(
+                    menStore: dataStore,
+                    womenStore: WomenDataStore.shared ?? WomenDataStore(),
+                    isWomenSection: false
+                )
+            }
             .fileImporter(
                 isPresented: $showRestorePicker,
                 allowedContentTypes: [.json],
@@ -458,11 +469,19 @@ public struct VaultView: View {
                 switch result {
                 case .success(let urls):
                     if let selectedUrl = urls.first {
-                        if let res = dataStore.restoreFromBackup(fileUrl: selectedUrl) {
-                            showToast("Restored \(res.items) pieces & \(res.wishlist) wishlist items!")
+                        let res = AtelierBackupManager.shared.importBackup(
+                            from: selectedUrl,
+                            menStore: dataStore,
+                            womenStore: WomenDataStore.shared ?? WomenDataStore(),
+                            mode: .merge
+                        )
+                        switch res {
+                        case .success(let summary):
+                            showToast("Imported \(summary.detailedMessage)!")
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        } else {
-                            showToast("Could not parse valid AtelierMen backup")
+                        case .failure(let err):
+                            showToast(err.localizedDescription)
+                            UINotificationFeedbackGenerator().notificationOccurred(.error)
                         }
                     }
                 case .failure(let err):
@@ -991,15 +1010,4 @@ public struct VaultView: View {
             showToast("Failed to generate backup file")
         }
     }
-}
-
-// MARK: - UIActivityViewController Wrapper
-private struct ShareActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
