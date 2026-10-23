@@ -228,6 +228,13 @@ public final class DataStore: ObservableObject {
         return true
     }
 
+    public func updateWishlistItem(_ item: WishlistItem) {
+        if let idx = wishlistItems.firstIndex(where: { $0.id == item.id }) {
+            wishlistItems[idx] = item
+            saveWishlist()
+        }
+    }
+
     public func deleteWishlistItem(_ item: WishlistItem) {
         wishlistItems.removeAll { $0.id == item.id }
         saveWishlist()

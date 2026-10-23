@@ -10,6 +10,10 @@ public struct WishlistView: View {
     @State private var itemToMoveToVault: WishlistItem? = nil
     @State private var storageLocationForMove = "Main Closet"
 
+    // Detail & Edit Sheets
+    @State private var selectedDetailItem: WishlistItem? = nil
+    @State private var itemToEdit: WishlistItem? = nil
+
     // Multi-Select & Bulk Delete
     @State private var isSelecting = false
     @State private var selectedItemIds: Set<UUID> = []
@@ -50,6 +54,7 @@ public struct WishlistView: View {
                             VStack(spacing: 14) {
                                 ForEach(filteredWishlist) { item in
                                     wishlistCard(item: item)
+                                        .contentShape(Rectangle())
                                         .onTapGesture {
                                             if isSelecting {
                                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -58,6 +63,9 @@ public struct WishlistView: View {
                                                 } else {
                                                     selectedItemIds.insert(item.id)
                                                 }
+                                            } else {
+                                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                selectedDetailItem = item
                                             }
                                         }
                                 }
@@ -212,6 +220,21 @@ public struct WishlistView: View {
                         showToast("Item already in Wishlist — duplicate ignored & merged")
                     }
                 }
+            }
+            .sheet(item: $selectedDetailItem) { item in
+                WishlistDetailView(
+                    dataStore: dataStore,
+                    item: item,
+                    onEdit: { editItem in
+                        self.itemToEdit = editItem
+                    },
+                    onMoveToVault: { moveItem in
+                        self.itemToMoveToVault = moveItem
+                    }
+                )
+            }
+            .sheet(item: $itemToEdit) { item in
+                AddWishlistItemSheet(dataStore: dataStore, existingItem: item)
             }
             .sheet(isPresented: $showAddWishlistSheet) {
                 AddWishlistItemSheet(dataStore: dataStore)
@@ -431,6 +454,10 @@ public struct WishlistView: View {
                             .background(LuxuryTheme.secondaryBackground)
                             .foregroundStyle(LuxuryTheme.accentAmber)
                             .clipShape(Capsule())
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(LuxuryTheme.textTertiary)
                     }
 
                     Text(item.name)
@@ -580,10 +607,11 @@ public struct WishlistView: View {
     }
 }
 
-// MARK: - Add Wishlist Item Sheet
+// MARK: - Add / Edit Wishlist Item Sheet
 public struct AddWishlistItemSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var dataStore: DataStore
+    public let existingItem: WishlistItem?
 
     @State private var name: String = ""
     @State private var brand: String = ""
@@ -598,8 +626,19 @@ public struct AddWishlistItemSheet: View {
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
     @State private var showWebImportSheet = false
 
-    public init(dataStore: DataStore) {
+    public init(dataStore: DataStore, existingItem: WishlistItem? = nil) {
         self.dataStore = dataStore
+        self.existingItem = existingItem
+        if let item = existingItem {
+            _name = State(initialValue: item.name)
+            _brand = State(initialValue: item.brand)
+            _category = State(initialValue: item.category)
+            _priceText = State(initialValue: item.targetPrice > 0 ? "\(Int(item.targetPrice))" : "")
+            _storeUrl = State(initialValue: item.storeUrl)
+            _priority = State(initialValue: item.priority)
+            _notes = State(initialValue: item.notes)
+            _photos = State(initialValue: item.photos)
+        }
     }
 
     public var body: some View {
@@ -626,7 +665,7 @@ public struct AddWishlistItemSheet: View {
 
                     // Submit Button
                     Button(action: saveWishlist) {
-                        Text("Add to Wishlist ✨")
+                        Text(existingItem != nil ? "Save Changes ✨" : "Add to Wishlist ✨")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color.black)
                             .frame(maxWidth: .infinity)
@@ -642,7 +681,7 @@ public struct AddWishlistItemSheet: View {
                 .padding(.vertical, 16)
             }
             .background(LuxuryTheme.background.ignoresSafeArea())
-            .navigationTitle("New Wishlist Item")
+            .navigationTitle(existingItem != nil ? "Edit Wishlist Item" : "New Wishlist Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -912,17 +951,34 @@ public struct AddWishlistItemSheet: View {
 
     private func saveWishlist() {
         let p = Double(priceText.filter("0123456789.".contains)) ?? 0.0
-        let item = WishlistItem(
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            brand: brand.trimmingCharacters(in: .whitespacesAndNewlines),
-            category: category,
-            targetPrice: p,
-            photos: photos,
-            storeUrl: storeUrl.trimmingCharacters(in: .whitespacesAndNewlines),
-            priority: priority,
-            notes: notes
-        )
-        dataStore.addWishlistItem(item, ignoreDuplicates: true)
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUrl = storeUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let existing = existingItem {
+            var updated = existing
+            updated.name = trimmedName
+            updated.brand = trimmedBrand
+            updated.category = category
+            updated.targetPrice = p
+            updated.photos = photos
+            updated.storeUrl = trimmedUrl
+            updated.priority = priority
+            updated.notes = notes
+            dataStore.updateWishlistItem(updated)
+        } else {
+            let item = WishlistItem(
+                name: trimmedName,
+                brand: trimmedBrand,
+                category: category,
+                targetPrice: p,
+                photos: photos,
+                storeUrl: trimmedUrl,
+                priority: priority,
+                notes: notes
+            )
+            dataStore.addWishlistItem(item, ignoreDuplicates: true)
+        }
         dismiss()
     }
 }
