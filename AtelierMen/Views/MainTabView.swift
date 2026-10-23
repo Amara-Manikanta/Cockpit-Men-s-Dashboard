@@ -2,15 +2,17 @@ import SwiftUI
 
 public struct MainTabView: View {
     @ObservedObject var dataStore: DataStore
+    var activeGenderProfile: Binding<String>? = nil
     @AppStorage("app_selected_tab") private var selectedTab: Int = 0
 
-    public init(dataStore: DataStore, initialTab: Int = 0) {
+    public init(dataStore: DataStore, activeGenderProfile: Binding<String>? = nil, initialTab: Int = 0) {
         self.dataStore = dataStore
+        self.activeGenderProfile = activeGenderProfile
     }
 
     public var body: some View {
         TabView(selection: $selectedTab) {
-            VaultView(dataStore: dataStore)
+            VaultView(dataStore: dataStore, activeGenderProfile: activeGenderProfile)
                 .tabItem {
                     Label("Vault", systemImage: "square.grid.2x2.fill")
                 }

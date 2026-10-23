@@ -35,8 +35,11 @@ public struct VaultView: View {
     @State private var showShareSheet = false
     @State private var showRestorePicker = false
 
-    public init(dataStore: DataStore) {
+    var activeGenderProfile: Binding<String>? = nil
+
+    public init(dataStore: DataStore, activeGenderProfile: Binding<String>? = nil) {
         self.dataStore = dataStore
+        self.activeGenderProfile = activeGenderProfile
     }
 
     private var filteredItems: [WardrobeItem] {
@@ -85,10 +88,52 @@ public struct VaultView: View {
             ZStack(alignment: .bottom) {
                 ScrollView {
                     VStack(spacing: 16) {
+                        // Profile Switcher Header
+                        if let genderBinding = activeGenderProfile {
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Text("🎩")
+                                    Text("MEN'S ATELIER")
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .tracking(1.2)
+                                        .foregroundStyle(LuxuryTheme.accentAmber)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(LuxuryTheme.cardBackground)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(LuxuryTheme.accentAmber.opacity(0.3), lineWidth: 1))
+
+                                Spacer()
+
+                                Button(action: {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        genderBinding.wrappedValue = "female"
+                                    }
+                                }) {
+                                    HStack(spacing: 5) {
+                                        Text("👗")
+                                        Text("Switch to Women's")
+                                            .font(.system(size: 12, weight: .bold))
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
+                                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(WomenLuxuryTheme.cardBackground)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(WomenLuxuryTheme.roseGold.opacity(0.4), lineWidth: 1))
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 4)
+                        }
+
                         // Portfolio Valuation Banner
                         portfolioValuationCard
                             .padding(.horizontal)
-                            .padding(.top, 4)
+                            .padding(.top, activeGenderProfile == nil ? 4 : 0)
 
                         // Search Bar
                         searchBarSection
@@ -229,6 +274,23 @@ public struct VaultView: View {
                                     }
                                     Button(action: { showWebImportSheet = true }) {
                                         Label("Import from Web", systemImage: "globe")
+                                    }
+                                    if let genderBinding = activeGenderProfile {
+                                        Divider()
+                                        Button(action: {
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                genderBinding.wrappedValue = "female"
+                                            }
+                                        }) {
+                                            Label("Switch to Women's Boutique 👗", systemImage: "person.crop.circle")
+                                        }
+                                        Button(action: {
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                genderBinding.wrappedValue = ""
+                                            }
+                                        }) {
+                                            Label("Change Profile (Men / Women)", systemImage: "arrow.triangle.2.circlepath")
+                                        }
                                     }
                                 } label: {
                                     Image(systemName: "ellipsis.circle")

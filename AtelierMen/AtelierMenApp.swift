@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct AtelierMenApp: App {
     @StateObject private var dataStore = DataStore()
+    @StateObject private var womenDataStore = WomenDataStore()
 
     init() {
         // Configure standard UIKit Dark Luxury Appearance
@@ -35,9 +36,9 @@ struct AtelierMenApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView(dataStore: dataStore)
+            RootDashboardView(menDataStore: dataStore, womenDataStore: womenDataStore)
                 .preferredColorScheme(.dark)
-                .background(LuxuryTheme.background.ignoresSafeArea())
+                .background(Color.black.ignoresSafeArea())
         }
     }
 }
