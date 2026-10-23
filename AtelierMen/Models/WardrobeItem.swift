@@ -40,11 +40,12 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
     // Accessories specific
     public var accessoryMaterial: String // e.g. "Full Grain European Cowhide", "Titanium Frame"
 
-    // Wear & Quantity Tracking
+    // Wear, Quantity & Aging Tracking
     public var timesWorn: Int // No of times worn
     public var lastWornDate: Date?
     public var quantity: Int // No of pairs / identical items owned (default 1)
     public var wearHistory: [Date] // Timestamps of each logged wear
+    public var garmentCondition: GarmentCondition? // Manual condition override: New, Medium, Old, Faded
 
     public init(
         id: UUID = UUID(),
@@ -76,7 +77,8 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         timesWorn: Int = 0,
         lastWornDate: Date? = nil,
         quantity: Int = 1,
-        wearHistory: [Date] = []
+        wearHistory: [Date] = [],
+        garmentCondition: GarmentCondition? = nil
     ) {
         self.id = id
         self.name = name
@@ -108,6 +110,19 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         self.lastWornDate = lastWornDate
         self.quantity = max(1, quantity)
         self.wearHistory = wearHistory
+        self.garmentCondition = garmentCondition
+    }
+
+    // MARK: - Condition & Aging Intelligence
+    public var effectiveCondition: GarmentCondition {
+        if let manual = garmentCondition {
+            return manual
+        }
+        return GarmentCondition.calculateFromWearCount(timesWorn)
+    }
+
+    public var isManuallySetCondition: Bool {
+        return garmentCondition != nil
     }
 
     // MARK: - Repeat Wear Intelligence
@@ -209,5 +224,6 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         lastWornDate = try container.decodeIfPresent(Date.self, forKey: .lastWornDate)
         quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
         wearHistory = try container.decodeIfPresent([Date].self, forKey: .wearHistory) ?? []
+        garmentCondition = try container.decodeIfPresent(GarmentCondition.self, forKey: .garmentCondition)
     }
 }

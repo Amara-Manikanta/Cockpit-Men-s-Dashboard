@@ -118,6 +118,7 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
     public var isFavorite: Bool
     public var quantity: Int // No of pairs / identical pieces owned (default 1)
     public var wearHistory: [Date]
+    public var garmentCondition: GarmentCondition? // Manual condition override: New, Medium, Old, Faded
 
     public init(
         id: UUID = UUID(),
@@ -142,7 +143,8 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         dateAdded: Date = Date(),
         isFavorite: Bool = false,
         quantity: Int = 1,
-        wearHistory: [Date] = []
+        wearHistory: [Date] = [],
+        garmentCondition: GarmentCondition? = nil
     ) {
         self.id = id
         self.title = title
@@ -167,6 +169,7 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         self.isFavorite = isFavorite
         self.quantity = max(1, quantity)
         self.wearHistory = wearHistory
+        self.garmentCondition = garmentCondition
     }
 
     public init(from decoder: Decoder) throws {
@@ -194,6 +197,19 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
         wearHistory = try container.decodeIfPresent([Date].self, forKey: .wearHistory) ?? []
+        garmentCondition = try container.decodeIfPresent(GarmentCondition.self, forKey: .garmentCondition)
+    }
+
+    // MARK: - Condition & Aging Intelligence
+    public var effectiveCondition: GarmentCondition {
+        if let manual = garmentCondition {
+            return manual
+        }
+        return GarmentCondition.calculateFromWearCount(timesWorn)
+    }
+
+    public var isManuallySetCondition: Bool {
+        return garmentCondition != nil
     }
 
     // MARK: - Repeat Wear Intelligence

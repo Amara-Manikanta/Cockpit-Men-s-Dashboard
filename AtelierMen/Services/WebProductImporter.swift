@@ -491,55 +491,260 @@ public final class WebProductImporter {
         return result
     }
 
-    // MARK: - Generic Web Page / OpenGraph
+    // MARK: - Generic Web Page / E-Commerce (Max, Bewakoof, Decathlon, Anker, Shopify, etc.)
     private func parseGenericWebPage(html: String, sourceUrl: String, baseUrl: URL) async -> ImportedProductData {
         var result = ImportedProductData()
         result.sourceUrl = sourceUrl
         result.notes = "Imported from web: \(sourceUrl)"
 
-        if let rawTitle = extractMeta(property: "og:title", from: html) ?? extractTitleTag(from: html) {
-            result.name = cleanProductTitle(rawTitle)
-        }
-
-        if let desc = extractMeta(property: "og:description", from: html) {
-            result.notes += "\n" + cleanHtmlEntities(desc)
-        }
-
-        if let brand = extractMeta(property: "og:site_name", from: html) {
-            result.brand = cleanHtmlEntities(brand)
-        }
-
         var candidateImages: [String] = []
-        if let ogImage = extractMeta(property: "og:image", from: html) {
-            if let resolved = URL(string: ogImage, relativeTo: baseUrl)?.absoluteString {
-                candidateImages.append(resolved)
+        let host = baseUrl.host?.lowercased() ?? ""
+
+        // 1. JSON-LD Extraction (Handles Max Fashion, Decathlon, Anker, Shopify, WooCommerce)
+        let scriptPattern = "<script[^>]+type=[\"']application/ld\\+json[\"'][^>]*>(.*?)</script>"
+        if let scriptRegex = try? NSRegularExpression(pattern: scriptPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) {
+            let matches = scriptRegex.matches(in: html, range: NSRange(html.startIndex..., in: html))
+            for match in matches {
+                guard match.numberOfRanges > 1,
+                      let range = Range(match.range(at: 1), in: html) else { continue }
+                let rawJson = String(html[range])
+                let unescaped = cleanHtmlEntities(rawJson)
+                guard let jsonData = unescaped.data(using: .utf8),
+                      let root = try? JSONSerialization.jsonObject(with: jsonData) else { continue }
+
+                var productCandidates: [[String: Any]] = []
+                if let dict = root as? [String: Any] {
+                    if let graph = dict["@graph"] as? [[String: Any]] {
+                        productCandidates.append(contentsOf: graph)
+                    } else {
+                        productCandidates.append(dict)
+                    }
+                } else if let arr = root as? [[String: Any]] {
+                    productCandidates.append(contentsOf: arr)
+                }
+
+                for item in productCandidates {
+                    let typeStr = "\(item["@type"] ?? "")"
+                    guard typeStr.contains("Product") else { continue }
+
+                    // Name
+                    if result.name.isEmpty, let name = item["name"] as? String, !name.isEmpty {
+                        result.name = cleanProductTitle(name)
+                    }
+
+                    // Brand
+                    if result.brand.isEmpty {
+                        if let bDict = item["brand"] as? [String: Any], let bName = bDict["name"] as? String {
+                            result.brand = cleanHtmlEntities(bName)
+                        } else if let bStr = item["brand"] as? String, !bStr.isEmpty {
+                            result.brand = cleanHtmlEntities(bStr)
+                        }
+                    }
+
+                    // Price
+                    if result.price == 0 {
+                        var offersDict: [String: Any]? = nil
+                        if let o = item["offers"] as? [String: Any] {
+                            offersDict = o
+                        } else if let oArr = item["offers"] as? [[String: Any]], let first = oArr.first {
+                            offersDict = first
+                        }
+                        if let o = offersDict {
+                            let pRaw = o["price"] ?? o["lowPrice"]
+                            if let pNum = pRaw as? Double {
+                                result.price = pNum
+                            } else if let pInt = pRaw as? Int {
+                                result.price = Double(pInt)
+                            } else if let pStr = pRaw as? String,
+                                      let val = Double(pStr.filter("0123456789.".contains)) {
+                                result.price = val
+                            }
+                        }
+                    }
+
+                    // Images
+                    if let imgArr = item["image"] as? [Any] {
+                        for im in imgArr {
+                            if let str = im as? String {
+                                candidateImages.append(str)
+                            } else if let dict = im as? [String: Any], let urlStr = dict["url"] as? String {
+                                candidateImages.append(urlStr)
+                            }
+                        }
+                    } else if let imgStr = item["image"] as? String {
+                        candidateImages.append(imgStr)
+                    } else if let imgDict = item["image"] as? [String: Any], let urlStr = imgDict["url"] as? String {
+                        candidateImages.append(urlStr)
+                    }
+                }
             }
         }
 
-        if let priceStr = extractMeta(property: "product:price:amount", from: html),
-           let p = Double(priceStr.filter("0123456789.".contains)) {
-            result.price = p
+        // 2. Next.js __NEXT_DATA__ (Handles Bewakoof and modern React stores)
+        if (result.name.isEmpty || candidateImages.isEmpty) && html.contains("__NEXT_DATA__") {
+            if let ndMatch = extractRegex(pattern: "<script\\s+id=[\"']__NEXT_DATA__[\"'][^>]*>(.*?)</script>", from: html),
+               let ndData = ndMatch.data(using: .utf8),
+               let ndJson = try? JSONSerialization.jsonObject(with: ndData) as? [String: Any],
+               let props = ndJson["props"] as? [String: Any],
+               let pageProps = props["pageProps"] as? [String: Any] {
+
+                let pd = (pageProps["productDetails"] as? [String: Any])
+                    ?? (pageProps["product"] as? [String: Any])
+                    ?? (pageProps["initialData"] as? [String: Any])
+
+                if let pd = pd {
+                    if result.name.isEmpty, let pName = pd["name"] as? String {
+                        result.name = cleanProductTitle(pName)
+                    }
+                    if result.brand.isEmpty, let bName = pd["brand_name"] as? String {
+                        result.brand = cleanHtmlEntities(bName)
+                    }
+                    if result.price == 0 {
+                        let pRaw = pd["discounted_price"] ?? pd["member_price"] ?? pd["mrp"]
+                        if let pNum = pRaw as? Double {
+                            result.price = pNum
+                        } else if let pInt = pRaw as? Int {
+                            result.price = Double(pInt)
+                        } else if let pStr = pRaw as? String,
+                                  let val = Double(pStr.filter("0123456789.".contains)) {
+                            result.price = val
+                        }
+                    }
+                    if let imList = pd["images"] as? [Any] {
+                        for im in imList {
+                            if let s = im as? String {
+                                candidateImages.append(s)
+                            } else if let d = im as? [String: Any] {
+                                for key in ["actual", "url", "image", "original"] {
+                                    if let u = d[key] as? String {
+                                        candidateImages.append(u)
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        result.photoFilenames = await downloadAllImages(imageUrls: candidateImages)
+        // 3. OpenGraph & Meta Tags Fallback (Flexible attribute ordering)
+        if result.name.isEmpty {
+            if let rawTitle = extractMetaFlexible(property: "og:title", from: html)
+                ?? extractMetaFlexible(property: "twitter:title", from: html)
+                ?? extractTitleTag(from: html) {
+                result.name = cleanProductTitle(rawTitle)
+            }
+        }
+
+        if let desc = extractMetaFlexible(property: "og:description", from: html)
+            ?? extractMetaFlexible(property: "twitter:description", from: html)
+            ?? extractMetaFlexible(property: "description", from: html) {
+            result.notes += "\n" + cleanHtmlEntities(desc)
+        }
+
+        if result.brand.isEmpty {
+            if let brand = extractMetaFlexible(property: "og:site_name", from: html)
+                ?? extractMetaFlexible(property: "brand", from: html) {
+                result.brand = cleanHtmlEntities(brand)
+            }
+        }
+
+        if candidateImages.isEmpty {
+            for prop in ["og:image", "twitter:image", "twitter:image:src"] {
+                if let img = extractMetaFlexible(property: prop, from: html), !img.isEmpty {
+                    candidateImages.append(img)
+                }
+            }
+        }
+
+        if result.price == 0 {
+            for prop in ["product:price:amount", "og:price:amount", "price"] {
+                if let priceStr = extractMetaFlexible(property: prop, from: html),
+                   let p = Double(priceStr.filter("0123456789.".contains)), p > 0 {
+                    result.price = p
+                    break
+                }
+            }
+        }
+
+        // 4. Fallback Brand from Hostname
+        if result.brand.isEmpty || result.brand.lowercased() == "online shopping" {
+            if host.contains("bewakoof") {
+                result.brand = "Bewakoof"
+            } else if host.contains("decathlon") {
+                result.brand = "Decathlon"
+            } else if host.contains("maxfashion") {
+                result.brand = "Max"
+            } else if host.contains("anker") {
+                result.brand = "Anker"
+            } else if host.contains("zara") {
+                result.brand = "Zara"
+            } else if host.contains("hm.com") {
+                result.brand = "H&M"
+            } else if host.contains("uniqlo") {
+                result.brand = "Uniqlo"
+            }
+        }
+
+        // 5. Upgrade Images to High Resolution Studio Quality
+        var upgradedUrls: [String] = []
+        var seen = Set<String>()
+        for img in candidateImages {
+            guard let resolved = URL(string: img, relativeTo: baseUrl)?.absoluteString else { continue }
+            let upgraded = upgradeImageUrl(resolved)
+            if !seen.contains(upgraded) {
+                seen.insert(upgraded)
+                upgradedUrls.append(upgraded)
+            }
+        }
+
+        result.photoFilenames = await downloadAllImages(imageUrls: Array(upgradedUrls.prefix(6)))
         assignCategoryAndSubcategory(for: result.name.lowercased(), result: &result)
         return result
+    }
+
+    // MARK: - Image Resolution Upgrade
+    private func upgradeImageUrl(_ urlStr: String) -> String {
+        var u = urlStr
+        // Max Fashion Landmark cdn-cgi: upgrade tiny 150x150 thumbnails to 1200x1200 studio HD
+        if u.contains("/cdn-cgi/image/") {
+            u = u.replacingOccurrences(of: "/cdn-cgi/image/[^/]+/", with: "/cdn-cgi/image/h=1200,w=1200,q=90,fit=cover/", options: .regularExpression)
+        }
+        // Decathlon: upgrade f=768x0 to studio 1400x1400
+        if u.contains("mediadecathlon.com") {
+            u = u.replacingOccurrences(of: "f=\\d+x\\d+", with: "f=1400x1400", options: .regularExpression)
+        }
+        // Bewakoof: ensure original full size instead of compressed thumbnails
+        if u.contains("images.bewakoof.com") {
+            u = u.replacingOccurrences(of: "/s300/", with: "/original/")
+                .replacingOccurrences(of: "/m300/", with: "/original/")
+                .replacingOccurrences(of: "/t300/", with: "/original/")
+        }
+        // Shopify (Anker, etc.): upgrade _small, _compact, _medium, _large to _master
+        if u.contains("cdn.shopify.com") {
+            u = u.replacingOccurrences(of: "_(small|compact|medium|large)\\.", with: "_master.", options: .regularExpression)
+        }
+        return u
     }
 
     // MARK: - Title Cleaning
     public func cleanProductTitle(_ raw: String) -> String {
         var t = cleanHtmlEntities(raw)
+        // Strip any HTML tags like <b>...</b>
+        t = t.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
         // Remove prefixes like "Buy ", "Shop ", "Purchase ", "Order "
         t = t.replacingOccurrences(of: "^(Buy|Shop|Purchase|Order)\\s+", with: "", options: [.regularExpression, .caseInsensitive])
         // Remove trailing store and category suffixes
-        t = t.replacingOccurrences(of: "\\s+(at|on)\\s+Amazon\\.[a-z.]+.*", with: "", options: [.regularExpression, .caseInsensitive])
-        t = t.replacingOccurrences(of: "\\s*[:|-]\\s*Amazon\\.[a-z.]+.*", with: "", options: [.regularExpression, .caseInsensitive])
-        t = t.replacingOccurrences(of: "\\s*[:|-]\\s*Buy\\s+Online.*", with: "", options: [.regularExpression, .caseInsensitive])
-        t = t.replacingOccurrences(of: "\\s*\\|\\s*Myntra.*", with: "", options: [.regularExpression, .caseInsensitive])
-        t = t.replacingOccurrences(of: "\\s*\\|\\s*Ajio\\.com.*", with: "", options: [.regularExpression, .caseInsensitive])
-        t = t.replacingOccurrences(of: "\\s+(at|on)\\s+Ajio.*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s+(at|on)\\s+(Amazon|Bewakoof|Decathlon|Max\\s*Fashion|Anker|Ajio|Myntra)\\.[a-z.]+.*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s+(at|on)\\s+(Amazon|Bewakoof|Decathlon|Max\\s*Fashion|Anker|Ajio|Myntra).*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s*[:|\\-]\\s*(Amazon|Bewakoof|Decathlon|Max\\s*Fashion|Anker|Ajio|Myntra).*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s*[:|\\-]\\s*Buy\\s+Online.*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s*\\|\\s*(Myntra|Ajio|Bewakoof|Max\\s*Fashion|Decathlon|Anker).*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s+Online\\s+(at|in)\\s+.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s+Online\\s+at\\s+Best\\s+Prices.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s+at\\s+best\\s+price.*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s*-\\s*\\d{8,}.*", with: "", options: .regularExpression) // Remove internal SKU codes like - 1000013628325
         t = t.replacingOccurrences(of: "\\s*:\\s*(Shoes|Clothing|Electronics|Handbags|Luggage|Beauty|Sports).*", with: "", options: [.regularExpression, .caseInsensitive])
         // Remove trailing shoe sizes e.g. " 9 UK"
         t = t.replacingOccurrences(of: "\\s+\\d+(?:\\.\\d+)?\\s*(?:UK|US|EU|IN)\\b.*", with: "", options: [.regularExpression, .caseInsensitive])
@@ -743,8 +948,22 @@ public final class WebProductImporter {
     }
 
     private func extractMeta(property: String, from html: String) -> String? {
-        let pattern = "<meta[^>]+(?:property|name)=[\"']\(property)[\"'][^>]+content=[\"']([^\"']+)[\"']"
-        return extractRegex(pattern: pattern, from: html)
+        extractMetaFlexible(property: property, from: html)
+    }
+
+    private func extractMetaFlexible(property: String, from html: String) -> String? {
+        // Match both property="..." content="..." AND content="..." property="..."
+        let escapedProp = NSRegularExpression.escapedPattern(for: property)
+        let pattern1 = "<meta[^>]+(?:property|name)=[\"']\(escapedProp)[\"'][^>]+content=[\"']([^\"']*)[\"']"
+        let pattern2 = "<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+(?:property|name)=[\"']\(escapedProp)[\"']"
+
+        if let val = extractRegex(pattern: pattern1, from: html), !val.isEmpty {
+            return val
+        }
+        if let val = extractRegex(pattern: pattern2, from: html), !val.isEmpty {
+            return val
+        }
+        return nil
     }
 
     private func extractTitleTag(from html: String) -> String? {

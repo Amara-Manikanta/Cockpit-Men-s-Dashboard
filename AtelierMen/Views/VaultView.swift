@@ -8,6 +8,8 @@ public enum SortOption: String, CaseIterable, Identifiable {
     case brandAZ = "Brand: A to Z"
     case mostWorn = "Most Repeated / High Wear"
     case leastWorn = "Least Worn / Forgotten Gems"
+    case oldestCondition = "Old & Faded First"
+    case newestCondition = "New & Pristine First"
 
     public var id: String { rawValue }
 }
@@ -18,6 +20,7 @@ public struct VaultView: View {
     @State private var searchText: String = ""
     @State private var selectedCategory: ItemCategory? = nil
     @State private var selectedSubcategory: String? = nil
+    @State private var selectedConditionFilter: GarmentCondition? = nil
     @State private var sortOption: SortOption = .priceHighToLow
 
     // Multi-Select & Bulk Delete
@@ -59,6 +62,11 @@ public struct VaultView: View {
             result = result.filter { $0.subcategory == sub }
         }
 
+        // Garment Condition filter
+        if let cond = selectedConditionFilter {
+            result = result.filter { $0.effectiveCondition == cond }
+        }
+
         // Search text
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !query.isEmpty {
@@ -86,6 +94,18 @@ public struct VaultView: View {
             result.sort { $0.timesWorn > $1.timesWorn }
         case .leastWorn:
             result.sort { $0.timesWorn < $1.timesWorn }
+        case .oldestCondition:
+            result.sort {
+                let rank0 = ($0.effectiveCondition == .faded ? 3 : ($0.effectiveCondition == .old ? 2 : ($0.effectiveCondition == .medium ? 1 : 0)))
+                let rank1 = ($1.effectiveCondition == .faded ? 3 : ($1.effectiveCondition == .old ? 2 : ($1.effectiveCondition == .medium ? 1 : 0)))
+                return rank0 != rank1 ? rank0 > rank1 : $0.timesWorn > $1.timesWorn
+            }
+        case .newestCondition:
+            result.sort {
+                let rank0 = ($0.effectiveCondition == .brandNew ? 3 : ($0.effectiveCondition == .medium ? 2 : ($0.effectiveCondition == .old ? 1 : 0)))
+                let rank1 = ($1.effectiveCondition == .brandNew ? 3 : ($1.effectiveCondition == .medium ? 2 : ($1.effectiveCondition == .old ? 1 : 0)))
+                return rank0 != rank1 ? rank0 > rank1 : $0.timesWorn < $1.timesWorn
+            }
         }
 
         return result
@@ -160,6 +180,10 @@ public struct VaultView: View {
                             subcategoryChips(for: selectedCategory)
                                 .padding(.horizontal)
                         }
+
+                        // Garment Condition Filter Chips (All, New, Medium, Old, Faded)
+                        conditionFilterChips
+                            .padding(.horizontal)
 
                         // Grid Controls (Count, Select Toggle & Sort Menu)
                         gridControlsRow
@@ -820,6 +844,60 @@ public struct VaultView: View {
                             .padding(.vertical, 6)
                             .background(selectedSubcategory == sub ? category.accentColor : LuxuryTheme.cardBackground)
                             .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Garment Condition Filter Chips
+    private var conditionFilterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // All Conditions
+                Button {
+                    withAnimation(.spring(response: 0.3)) { selectedConditionFilter = nil }
+                } label: {
+                    Text("All Conditions")
+                        .font(.system(size: 11, weight: selectedConditionFilter == nil ? .bold : .medium))
+                        .foregroundStyle(selectedConditionFilter == nil ? Color.black : LuxuryTheme.textSecondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5)
+                        .background(selectedConditionFilter == nil ? LuxuryTheme.accentAmber : LuxuryTheme.secondaryBackground)
+                        .clipShape(Capsule())
+                }
+
+                // New, Medium, Old, Faded
+                ForEach(GarmentCondition.allCases) { cond in
+                    let isSelected = selectedConditionFilter == cond
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            if selectedConditionFilter == cond {
+                                selectedConditionFilter = nil
+                            } else {
+                                selectedConditionFilter = cond
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: cond.iconName)
+                                .font(.system(size: 9))
+                            Text(cond.displayName)
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                            let count = dataStore.items.filter { $0.effectiveCondition == cond }.count
+                            Text("(\(count))")
+                                .font(.system(size: 10))
+                                .opacity(0.8)
+                        }
+                        .foregroundStyle(isSelected ? Color.white : cond.color)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(isSelected ? cond.color : cond.color.opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(cond.color.opacity(isSelected ? 0.0 : 0.35), lineWidth: 1)
+                        )
                     }
                 }
             }

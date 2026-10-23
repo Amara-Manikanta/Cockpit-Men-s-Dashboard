@@ -227,6 +227,13 @@ public final class DataStore: ObservableObject {
         saveItems()
     }
 
+    public func updateGarmentCondition(_ condition: GarmentCondition?, for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].garmentCondition = condition
+            saveItems()
+        }
+    }
+
     public func incrementQuantity(for item: WardrobeItem) {
         if let idx = items.firstIndex(where: { $0.id == item.id }) {
             items[idx].quantity += 1

@@ -51,6 +51,7 @@ public struct AddEditItemView: View {
     // Usage & Ownership (Pairs & Wear Count)
     @State private var quantity: Int = 1
     @State private var timesWorn: Int = 0
+    @State private var selectedCondition: GarmentCondition? = nil
 
     public init(dataStore: DataStore, existingItem: WardrobeItem? = nil) {
         self.dataStore = dataStore
@@ -483,12 +484,13 @@ public struct AddEditItemView: View {
         accessoryMaterial = item.accessoryMaterial
         quantity = item.quantity
         timesWorn = item.timesWorn
+        selectedCondition = item.garmentCondition
     }
 
     // MARK: - Usage & Pairs Section
     private var usageAndPairsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Ownership & Wear History")
+            Text("Ownership, Condition & Lifespan")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(LuxuryTheme.textPrimary)
 
@@ -567,6 +569,63 @@ public struct AddEditItemView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
+
+            // Garment Condition Dropdown
+            VStack(alignment: .leading, spacing: 6) {
+                Text("GARMENT CONDITION")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(LuxuryTheme.textTertiary)
+
+                Menu {
+                    Button {
+                        selectedCondition = nil
+                    } label: {
+                        HStack {
+                            Text("Auto (Based on \(timesWorn) wears)")
+                            if selectedCondition == nil {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    ForEach(GarmentCondition.allCases) { cond in
+                        Button {
+                            selectedCondition = cond
+                        } label: {
+                            HStack {
+                                Label(cond.displayName, systemImage: cond.iconName)
+                                if selectedCondition == cond {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        let current = selectedCondition ?? GarmentCondition.calculateFromWearCount(timesWorn)
+                        Image(systemName: current.iconName)
+                            .foregroundStyle(current.color)
+                        Text(current.displayName)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(LuxuryTheme.textPrimary)
+
+                        Text(selectedCondition != nil ? "(Manual)" : "(Auto: \(timesWorn) wears)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(LuxuryTheme.textTertiary)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundStyle(LuxuryTheme.textTertiary)
+                    }
+                    .padding(12)
+                    .background(LuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
         }
         .padding(16)
         .luxuryCardStyle(cornerRadius: 16)
@@ -608,6 +667,7 @@ public struct AddEditItemView: View {
         item.accessoryMaterial = accessoryMaterial
         item.quantity = max(1, quantity)
         item.timesWorn = timesWorn
+        item.garmentCondition = selectedCondition
 
         if existingItem == nil {
             dataStore.addItem(item)

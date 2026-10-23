@@ -38,6 +38,10 @@ public struct WomenItemDetailView: View {
                     wearAndAgingCard
                         .padding(.horizontal)
 
+                    // Garment Condition & Wear Aging Card
+                    garmentConditionAndAgingCard
+                        .padding(.horizontal)
+
                     // Specifications & Metal Card
                     specificationsCard
                         .padding(.horizontal)
@@ -381,6 +385,149 @@ public struct WomenItemDetailView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(WomenLuxuryTheme.textTertiary)
             }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .womenLuxuryCardStyle(cornerRadius: 16)
+    }
+
+    // MARK: - Garment Condition & Aging Card
+    private var garmentConditionAndAgingCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header with Condition Dropdown Menu
+            HStack {
+                Image(systemName: "tshirt.fill")
+                    .foregroundStyle(currentItem.effectiveCondition.color)
+                Text("GARMENT CONDITION & WEAR AGING")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                Spacer()
+
+                // Condition Dropdown Menu
+                Menu {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        womenDataStore.updateGarmentCondition(nil, for: currentItem)
+                    } label: {
+                        HStack {
+                            Text("Auto (Based on \(currentItem.timesWorn) wears)")
+                            if !currentItem.isManuallySetCondition {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    ForEach(GarmentCondition.allCases) { condition in
+                        Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            womenDataStore.updateGarmentCondition(condition, for: currentItem)
+                        } label: {
+                            HStack {
+                                Label(condition.displayName, systemImage: condition.iconName)
+                                if currentItem.garmentCondition == condition {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: currentItem.effectiveCondition.iconName)
+                            .font(.system(size: 10))
+                        Text(currentItem.effectiveCondition.displayName)
+                            .font(.system(size: 11, weight: .bold))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9))
+                    }
+                    .foregroundStyle(currentItem.effectiveCondition.color)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(currentItem.effectiveCondition.color.opacity(0.16))
+                    .clipShape(Capsule())
+                }
+            }
+
+            // Status Banner with Icon and Explanation
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(currentItem.effectiveCondition.color.opacity(0.18))
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: currentItem.effectiveCondition.iconName)
+                        .font(.system(size: 20))
+                        .foregroundStyle(currentItem.effectiveCondition.color)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(currentItem.effectiveCondition.badgeText)
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(currentItem.effectiveCondition.color)
+
+                        Text(currentItem.isManuallySetCondition ? "• Manual" : "• Auto-Tracked")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(WomenLuxuryTheme.textTertiary)
+                    }
+
+                    Text(currentItem.effectiveCondition.description)
+                        .font(.system(size: 12))
+                        .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                }
+            }
+
+            Divider()
+                .background(WomenLuxuryTheme.cardBorder)
+
+            // Wear Lifecycle Progress Indicator
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Wear Aging Lifespan")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                    Spacer()
+                    Text("\(currentItem.timesWorn) / 50 typical wears (\(Int(GarmentCondition.wearProgressRatio(currentItem.timesWorn) * 100))%)")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(currentItem.effectiveCondition.color)
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(WomenLuxuryTheme.secondaryBackground)
+                            .frame(height: 7)
+
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.green, Color.blue, Color.orange, Color.red],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geo.size.width * CGFloat(GarmentCondition.wearProgressRatio(currentItem.timesWorn)), height: 7)
+                    }
+                }
+                .frame(height: 7)
+            }
+
+            // Advisory / Retirement Warning Recommendation
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: currentItem.effectiveCondition.isOldOrFaded ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(currentItem.effectiveCondition.color)
+
+                Text(currentItem.effectiveCondition.wearRecommendation)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(currentItem.effectiveCondition.isOldOrFaded ? WomenLuxuryTheme.textPrimary : WomenLuxuryTheme.textSecondary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(currentItem.effectiveCondition.color.opacity(currentItem.effectiveCondition.isOldOrFaded ? 0.14 : 0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)

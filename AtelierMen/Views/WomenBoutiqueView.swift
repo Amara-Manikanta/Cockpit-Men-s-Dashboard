@@ -6,6 +6,7 @@ public struct WomenBoutiqueView: View {
 
     @State private var searchText: String = ""
     @State private var selectedCategory: WomenCategory? = nil
+    @State private var selectedConditionFilter: GarmentCondition? = nil
     @State private var sortOption: WomenSortOption = .priceHighToLow
 
     // Multi-Select
@@ -30,6 +31,9 @@ public struct WomenBoutiqueView: View {
         if let cat = selectedCategory {
             list = list.filter { $0.category == cat }
         }
+        if let cond = selectedConditionFilter {
+            list = list.filter { $0.effectiveCondition == cond }
+        }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !q.isEmpty {
             list = list.filter {
@@ -46,6 +50,18 @@ public struct WomenBoutiqueView: View {
         case .priceLowToHigh: return list.sorted { $0.price < $1.price }
         case .newest: return list.sorted { $0.dateAdded > $1.dateAdded }
         case .mostWorn: return list.sorted { $0.timesWorn > $1.timesWorn }
+        case .oldestCondition:
+            return list.sorted {
+                let rank0 = ($0.effectiveCondition == .faded ? 3 : ($0.effectiveCondition == .old ? 2 : ($0.effectiveCondition == .medium ? 1 : 0)))
+                let rank1 = ($1.effectiveCondition == .faded ? 3 : ($1.effectiveCondition == .old ? 2 : ($1.effectiveCondition == .medium ? 1 : 0)))
+                return rank0 != rank1 ? rank0 > rank1 : $0.timesWorn > $1.timesWorn
+            }
+        case .newestCondition:
+            return list.sorted {
+                let rank0 = ($0.effectiveCondition == .brandNew ? 3 : ($0.effectiveCondition == .medium ? 2 : ($0.effectiveCondition == .old ? 1 : 0)))
+                let rank1 = ($1.effectiveCondition == .brandNew ? 3 : ($1.effectiveCondition == .medium ? 2 : ($1.effectiveCondition == .old ? 1 : 0)))
+                return rank0 != rank1 ? rank0 > rank1 : $0.timesWorn < $1.timesWorn
+            }
         }
     }
 
@@ -73,6 +89,10 @@ public struct WomenBoutiqueView: View {
 
                         // Category Filter Scroll
                         categoryFilterScroll
+                            .padding(.horizontal)
+
+                        // Garment Condition Filter Chips (All, New, Medium, Old, Faded)
+                        conditionFilterChips
                             .padding(.horizontal)
 
                         // Grid Controls (Count & Sort)
@@ -507,6 +527,60 @@ public struct WomenBoutiqueView: View {
         }
     }
 
+    // MARK: - Garment Condition Filter Chips
+    private var conditionFilterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // All Conditions
+                Button {
+                    withAnimation(.spring(response: 0.3)) { selectedConditionFilter = nil }
+                } label: {
+                    Text("All Conditions")
+                        .font(.system(size: 11, weight: selectedConditionFilter == nil ? .bold : .medium))
+                        .foregroundStyle(selectedConditionFilter == nil ? Color.black : WomenLuxuryTheme.textSecondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5)
+                        .background(selectedConditionFilter == nil ? WomenLuxuryTheme.roseGold : WomenLuxuryTheme.secondaryBackground)
+                        .clipShape(Capsule())
+                }
+
+                // New, Medium, Old, Faded
+                ForEach(GarmentCondition.allCases) { cond in
+                    let isSelected = selectedConditionFilter == cond
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            if selectedConditionFilter == cond {
+                                selectedConditionFilter = nil
+                            } else {
+                                selectedConditionFilter = cond
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: cond.iconName)
+                                .font(.system(size: 9))
+                            Text(cond.displayName)
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                            let count = womenDataStore.items.filter { $0.effectiveCondition == cond }.count
+                            Text("(\(count))")
+                                .font(.system(size: 10))
+                                .opacity(0.8)
+                        }
+                        .foregroundStyle(isSelected ? Color.white : cond.color)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(isSelected ? cond.color : cond.color.opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(cond.color.opacity(isSelected ? 0.0 : 0.35), lineWidth: 1)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Grid Controls Row
     private var gridControlsRow: some View {
         HStack {
@@ -674,6 +748,21 @@ public struct WomenBoutiqueView: View {
                     .background(item.repeatWearStatus.color.opacity(0.12))
                     .clipShape(Capsule())
                 }
+
+                // Garment Aging / Condition Pill (Old / Faded)
+                if item.effectiveCondition.isOldOrFaded {
+                    HStack(spacing: 3) {
+                        Image(systemName: item.effectiveCondition.iconName)
+                            .font(.system(size: 8))
+                        Text(item.effectiveCondition.badgeText)
+                            .font(.system(size: 9, weight: .black))
+                    }
+                    .foregroundStyle(item.effectiveCondition.color)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(item.effectiveCondition.color.opacity(0.14))
+                    .clipShape(Capsule())
+                }
             }
             .padding(10)
         }
@@ -774,6 +863,8 @@ public enum WomenSortOption: String, CaseIterable, Identifiable {
     case priceHighToLow = "Valuation: High to Low"
     case priceLowToHigh = "Valuation: Low to High"
     case mostWorn = "Most Worn"
+    case oldestCondition = "Old & Faded First"
+    case newestCondition = "New & Pristine First"
 
     public var id: String { rawValue }
 }

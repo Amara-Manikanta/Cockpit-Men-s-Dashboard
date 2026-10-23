@@ -23,6 +23,7 @@ public struct WomenAddEditItemView: View {
     @State private var storeUrl: String = ""
     @State private var quantity: Int = 1
     @State private var timesWorn: Int = 0
+    @State private var selectedCondition: GarmentCondition? = nil
 
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
     @State private var showScannerSheet: Bool = false
@@ -49,6 +50,7 @@ public struct WomenAddEditItemView: View {
             _storeUrl = State(initialValue: item.storeUrl)
             _quantity = State(initialValue: max(1, item.quantity))
             _timesWorn = State(initialValue: item.timesWorn)
+            _selectedCondition = State(initialValue: item.garmentCondition)
         }
     }
 
@@ -427,6 +429,7 @@ public struct WomenAddEditItemView: View {
             updated.storeUrl = storeUrl
             updated.quantity = max(1, quantity)
             updated.timesWorn = timesWorn
+            updated.garmentCondition = selectedCondition
             womenDataStore.updateItem(updated)
         } else {
             var item = WomenWardrobeItem(
@@ -449,6 +452,7 @@ public struct WomenAddEditItemView: View {
             )
             item.quantity = max(1, quantity)
             item.timesWorn = timesWorn
+            item.garmentCondition = selectedCondition
             womenDataStore.addItem(item, ignoreDuplicates: true)
         }
         dismiss()
@@ -574,6 +578,63 @@ public struct WomenAddEditItemView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .frame(maxWidth: .infinity)
+            }
+
+            // Garment Condition Dropdown
+            VStack(alignment: .leading, spacing: 6) {
+                Text("GARMENT CONDITION")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                Menu {
+                    Button {
+                        selectedCondition = nil
+                    } label: {
+                        HStack {
+                            Text("Auto (Based on \(timesWorn) wears)")
+                            if selectedCondition == nil {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    ForEach(GarmentCondition.allCases) { cond in
+                        Button {
+                            selectedCondition = cond
+                        } label: {
+                            HStack {
+                                Label(cond.displayName, systemImage: cond.iconName)
+                                if selectedCondition == cond {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        let current = selectedCondition ?? GarmentCondition.calculateFromWearCount(timesWorn)
+                        Image(systemName: current.iconName)
+                            .foregroundStyle(current.color)
+                        Text(current.displayName)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+
+                        Text(selectedCondition != nil ? "(Manual)" : "(Auto: \(timesWorn) wears)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundStyle(WomenLuxuryTheme.textTertiary)
+                    }
+                    .padding(12)
+                    .background(WomenLuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
             }
         }
         .padding(16)

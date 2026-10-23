@@ -196,6 +196,21 @@ public struct ItemCardView: View {
                     .clipShape(Capsule())
                 }
 
+                // Garment Aging / Condition Pill (Old / Faded)
+                if item.effectiveCondition.isOldOrFaded {
+                    HStack(spacing: 3) {
+                        Image(systemName: item.effectiveCondition.iconName)
+                            .font(.system(size: 8))
+                        Text(item.effectiveCondition.badgeText)
+                            .font(.system(size: 9, weight: .black))
+                    }
+                    .foregroundStyle(item.effectiveCondition.color)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(item.effectiveCondition.color.opacity(0.14))
+                    .clipShape(Capsule())
+                }
+
                 // Key Spec Pill
                 HStack(spacing: 4) {
                     Image(systemName: item.category.iconName)
