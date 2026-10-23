@@ -20,6 +20,7 @@ public struct AddEditItemView: View {
     @State private var photos: [String] = []
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
     @State private var showWebImportSheet = false
+    @State private var showScannerSheet = false
 
     // Clothes
     @State private var size: String = ""
@@ -47,6 +48,10 @@ public struct AddEditItemView: View {
     // Accessories
     @State private var accessoryMaterial: String = ""
 
+    // Usage & Ownership (Pairs & Wear Count)
+    @State private var quantity: Int = 1
+    @State private var timesWorn: Int = 0
+
     public init(dataStore: DataStore, existingItem: WardrobeItem? = nil) {
         self.dataStore = dataStore
         self.existingItem = existingItem
@@ -67,6 +72,9 @@ public struct AddEditItemView: View {
 
                     // Category Specific Specs
                     categorySpecsSection
+
+                    // Ownership & Wear History (Pairs & Times Worn)
+                    usageAndPairsSection
 
                     // Valuation & Location
                     valuationAndLocationSection
@@ -94,6 +102,14 @@ public struct AddEditItemView: View {
             .sheet(isPresented: $showWebImportSheet) {
                 WebImportSheet { imported in
                     applyImportedData(imported)
+                }
+            }
+            .sheet(isPresented: $showScannerSheet) {
+                QRCodeScannerView(
+                    title: "Scan Product Barcode / QR",
+                    subtitle: "Scan box barcode to auto-fill SKU, or QR code to import product details"
+                ) { code in
+                    handleScannedCode(code)
                 }
             }
             .onAppear {
@@ -226,22 +242,42 @@ public struct AddEditItemView: View {
                     }
                 }
 
-                // Web Import Button
-                Button(action: { showWebImportSheet = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "globe")
-                        Text("Amazon / Web")
+                HStack(spacing: 10) {
+                    // QR / Barcode Scan Button
+                    Button(action: { showScannerSheet = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "barcode.viewfinder")
+                            Text("Scan Barcode / QR")
+                        }
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(LuxuryTheme.accentGold)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(LuxuryTheme.accentGold.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(LuxuryTheme.accentGold.opacity(0.4), lineWidth: 1)
+                        )
                     }
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(LuxuryTheme.accentAmber)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 42)
-                    .background(LuxuryTheme.accentAmber.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(LuxuryTheme.accentAmber.opacity(0.4), lineWidth: 1)
-                    )
+
+                    // Web Import Button
+                    Button(action: { showWebImportSheet = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "globe")
+                            Text("Amazon / Web")
+                        }
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(LuxuryTheme.accentAmber)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(LuxuryTheme.accentAmber.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(LuxuryTheme.accentAmber.opacity(0.4), lineWidth: 1)
+                        )
+                    }
                 }
             }
         }
@@ -445,6 +481,95 @@ public struct AddEditItemView: View {
         volumeSize = item.volumeSize
         scentIngredients = item.scentIngredients
         accessoryMaterial = item.accessoryMaterial
+        quantity = item.quantity
+        timesWorn = item.timesWorn
+    }
+
+    // MARK: - Usage & Pairs Section
+    private var usageAndPairsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Ownership & Wear History")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(LuxuryTheme.textPrimary)
+
+            HStack(spacing: 12) {
+                // Number of Pairs / Identical Items Owned
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PAIRS / QTY OWNED")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(LuxuryTheme.textTertiary)
+
+                    HStack {
+                        Button {
+                            if quantity > 1 { quantity -= 1 }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(LuxuryTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text("\(quantity) \(category == .shoes ? "Pairs" : "Items")")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(LuxuryTheme.textPrimary)
+
+                        Spacer()
+
+                        Button {
+                            quantity += 1
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(LuxuryTheme.accentAmber)
+                        }
+                    }
+                    .padding(10)
+                    .background(LuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .frame(maxWidth: .infinity)
+
+                // Times Worn
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("TIMES WORN")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(LuxuryTheme.textTertiary)
+
+                    HStack {
+                        Button {
+                            if timesWorn > 0 { timesWorn -= 1 }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(LuxuryTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text("\(timesWorn)x")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(LuxuryTheme.accentAmber)
+
+                        Spacer()
+
+                        Button {
+                            timesWorn += 1
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(LuxuryTheme.accentAmber)
+                        }
+                    }
+                    .padding(10)
+                    .background(LuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
     }
 
     private func saveItem() {
@@ -481,6 +606,8 @@ public struct AddEditItemView: View {
         item.volumeSize = volumeSize
         item.scentIngredients = scentIngredients
         item.accessoryMaterial = accessoryMaterial
+        item.quantity = max(1, quantity)
+        item.timesWorn = timesWorn
 
         if existingItem == nil {
             dataStore.addItem(item)
@@ -490,5 +617,48 @@ public struct AddEditItemView: View {
 
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
+    }
+
+    private func handleScannedCode(_ code: String) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            // It is a web product link (Amazon, Nike, Zara, etc.)
+            Task {
+                if let imported = try? await WebProductImporter.shared.importFromUrl(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(imported)
+                    }
+                } else {
+                    await MainActor.run {
+                        notes = (notes.isEmpty ? "" : notes + "\n") + "Source: " + trimmed
+                    }
+                }
+            }
+        } else {
+            // It is a barcode / UPC / SKU / Serial Number
+            serialNumber = trimmed
+            if notes.isEmpty {
+                notes = "Barcode: \(trimmed)"
+            } else if !notes.contains(trimmed) {
+                notes += "\nBarcode: \(trimmed)"
+            }
+
+            // AUTOMATIC SEARCH: Search online product databases for this barcode
+            Task {
+                if let product = await WebProductImporter.shared.searchProductByBarcode(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(product)
+                    }
+                } else {
+                    await MainActor.run {
+                        if name.isEmpty {
+                            name = "Scanned Item \(trimmed)"
+                        }
+                    }
+                }
+            }
+        }
     }
 }

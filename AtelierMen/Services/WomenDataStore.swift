@@ -149,6 +149,22 @@ public final class WomenDataStore: ObservableObject {
         }
     }
 
+    public func incrementQuantity(for item: WomenWardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].quantity += 1
+            saveItems()
+        }
+    }
+
+    public func decrementQuantity(for item: WomenWardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            if items[idx].quantity > 1 {
+                items[idx].quantity -= 1
+                saveItems()
+            }
+        }
+    }
+
     // MARK: - Wishlist CRUD
     @discardableResult
     public func addWishlistItem(_ item: WomenWishlistItem, ignoreDuplicates: Bool = true) -> Bool {

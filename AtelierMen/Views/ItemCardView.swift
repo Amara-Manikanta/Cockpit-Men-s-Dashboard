@@ -102,6 +102,28 @@ public struct ItemCardView: View {
                 }
                 .padding(10)
 
+                // Quantity badge if more than 1 pair / item owned
+                if item.quantity > 1 {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.fill.on.square.fill")
+                                    .font(.system(size: 9))
+                                Text("\(item.quantity) \(item.category == .shoes ? "PAIRS" : "ITEMS")")
+                                    .font(.system(size: 9, weight: .black))
+                            }
+                            .foregroundStyle(Color.black)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(LuxuryTheme.accentAmber)
+                            .clipShape(Capsule())
+                            .padding(8)
+                            Spacer()
+                        }
+                    }
+                }
+
                 // Multi-photo count badge at bottom right of image
                 if item.photos.count > 1 {
                     VStack {
@@ -145,6 +167,19 @@ public struct ItemCardView: View {
                 Text(item.formattedPrice)
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(LuxuryTheme.gold)
+
+                // Wear count & cost per wear pill
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 9))
+                    Text("Worn \(item.timesWorn)x")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("•")
+                    Text("CPW: \(item.formattedCostPerWear)")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(LuxuryTheme.textSecondary)
+                .padding(.top, 1)
 
                 // Key Spec Pill
                 HStack(spacing: 4) {

@@ -40,6 +40,11 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
     // Accessories specific
     public var accessoryMaterial: String // e.g. "Full Grain European Cowhide", "Titanium Frame"
 
+    // Wear & Quantity Tracking
+    public var timesWorn: Int // No of times worn
+    public var lastWornDate: Date?
+    public var quantity: Int // No of pairs / identical items owned (default 1)
+
     public init(
         id: UUID = UUID(),
         name: String,
@@ -66,7 +71,10 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         bagMaterialHardware: String = "",
         volumeSize: String = "",
         scentIngredients: String = "",
-        accessoryMaterial: String = ""
+        accessoryMaterial: String = "",
+        timesWorn: Int = 0,
+        lastWornDate: Date? = nil,
+        quantity: Int = 1
     ) {
         self.id = id
         self.name = name
@@ -94,6 +102,22 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         self.volumeSize = volumeSize
         self.scentIngredients = scentIngredients
         self.accessoryMaterial = accessoryMaterial
+        self.timesWorn = timesWorn
+        self.lastWornDate = lastWornDate
+        self.quantity = max(1, quantity)
+    }
+
+    public var costPerWear: Double {
+        return price / Double(max(1, timesWorn))
+    }
+
+    public var formattedCostPerWear: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencySymbol = "₹"
+        formatter.maximumFractionDigits = 0
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: costPerWear)) ?? "₹\(Int(costPerWear))"
     }
 
     public var primaryPhoto: String {
@@ -143,5 +167,38 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         case .accessories:
             return !accessoryMaterial.isEmpty ? accessoryMaterial : subcategory
         }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        brand = try container.decodeIfPresent(String.self, forKey: .brand) ?? ""
+        category = try container.decodeIfPresent(ItemCategory.self, forKey: .category) ?? .clothes
+        subcategory = try container.decodeIfPresent(String.self, forKey: .subcategory) ?? ""
+        price = try container.decodeIfPresent(Double.self, forKey: .price) ?? 0.0
+        photos = try container.decodeIfPresent([String].self, forKey: .photos) ?? []
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        storageLocation = try container.decodeIfPresent(String.self, forKey: .storageLocation) ?? "Main Closet"
+        occasion = try container.decodeIfPresent(String.self, forKey: .occasion) ?? "Everyday"
+        notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        size = try container.decodeIfPresent(String.self, forKey: .size) ?? ""
+        fabricMaterial = try container.decodeIfPresent(String.self, forKey: .fabricMaterial) ?? ""
+        color = try container.decodeIfPresent(String.self, forKey: .color) ?? ""
+        shoeSize = try container.decodeIfPresent(String.self, forKey: .shoeSize) ?? ""
+        leatherSoleType = try container.decodeIfPresent(String.self, forKey: .leatherSoleType) ?? ""
+        modelSpecs = try container.decodeIfPresent(String.self, forKey: .modelSpecs) ?? ""
+        serialNumber = try container.decodeIfPresent(String.self, forKey: .serialNumber) ?? ""
+        warrantyInfo = try container.decodeIfPresent(String.self, forKey: .warrantyInfo) ?? ""
+        techCondition = try container.decodeIfPresent(String.self, forKey: .techCondition) ?? "Pristine"
+        bagCapacity = try container.decodeIfPresent(String.self, forKey: .bagCapacity) ?? ""
+        bagMaterialHardware = try container.decodeIfPresent(String.self, forKey: .bagMaterialHardware) ?? ""
+        volumeSize = try container.decodeIfPresent(String.self, forKey: .volumeSize) ?? ""
+        scentIngredients = try container.decodeIfPresent(String.self, forKey: .scentIngredients) ?? ""
+        accessoryMaterial = try container.decodeIfPresent(String.self, forKey: .accessoryMaterial) ?? ""
+        timesWorn = try container.decodeIfPresent(Int.self, forKey: .timesWorn) ?? 0
+        lastWornDate = try container.decodeIfPresent(Date.self, forKey: .lastWornDate)
+        quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
     }
 }

@@ -116,6 +116,7 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
     public var lastWornDate: Date?
     public var dateAdded: Date
     public var isFavorite: Bool
+    public var quantity: Int // No of pairs / identical pieces owned (default 1)
 
     public init(
         id: UUID = UUID(),
@@ -138,7 +139,8 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         timesWorn: Int = 0,
         lastWornDate: Date? = nil,
         dateAdded: Date = Date(),
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        quantity: Int = 1
     ) {
         self.id = id
         self.title = title
@@ -161,6 +163,33 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         self.lastWornDate = lastWornDate
         self.dateAdded = dateAdded
         self.isFavorite = isFavorite
+        self.quantity = max(1, quantity)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        category = try container.decodeIfPresent(WomenCategory.self, forKey: .category) ?? .sareesEthnic
+        subcategory = try container.decodeIfPresent(String.self, forKey: .subcategory) ?? ""
+        brand = try container.decodeIfPresent(String.self, forKey: .brand) ?? ""
+        price = try container.decodeIfPresent(Double.self, forKey: .price) ?? 0.0
+        originalPrice = try container.decodeIfPresent(Double.self, forKey: .originalPrice) ?? price
+        photos = try container.decodeIfPresent([String].self, forKey: .photos) ?? []
+        metal = try container.decodeIfPresent(WomenMetalType.self, forKey: .metal) ?? .other
+        purity = try container.decodeIfPresent(String.self, forKey: .purity) ?? ""
+        sizeOrDimensions = try container.decodeIfPresent(String.self, forKey: .sizeOrDimensions) ?? "Free Size"
+        isSet = try container.decodeIfPresent(Bool.self, forKey: .isSet) ?? false
+        setIncludes = try container.decodeIfPresent(String.self, forKey: .setIncludes) ?? ""
+        storageLocation = try container.decodeIfPresent(String.self, forKey: .storageLocation) ?? "Main Boutique Closet"
+        occasion = try container.decodeIfPresent(String.self, forKey: .occasion) ?? "Everyday"
+        notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        storeUrl = try container.decodeIfPresent(String.self, forKey: .storeUrl) ?? ""
+        timesWorn = try container.decodeIfPresent(Int.self, forKey: .timesWorn) ?? 0
+        lastWornDate = try container.decodeIfPresent(Date.self, forKey: .lastWornDate)
+        dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
     }
 
     public var primaryPhoto: String {

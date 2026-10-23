@@ -283,6 +283,54 @@ public struct WomenItemDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
+            Divider()
+                .background(WomenLuxuryTheme.cardBorder)
+
+            // Duplicate pieces / pairs owned
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("PAIRS / PIECES OWNED")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(WomenLuxuryTheme.textTertiary)
+                    Text("\(currentItem.quantity) \(currentItem.category == .fineJewelry ? "Pairs/Sets" : "Items")")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                }
+
+                Spacer()
+
+                HStack(spacing: 8) {
+                    Button(action: {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        womenDataStore.decrementQuantity(for: currentItem)
+                    }) {
+                        Image(systemName: "minus")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                            .frame(width: 34, height: 34)
+                            .background(WomenLuxuryTheme.secondaryBackground)
+                            .clipShape(Circle())
+                    }
+
+                    Text("\(currentItem.quantity)")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                        .frame(minWidth: 26)
+
+                    Button(action: {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        womenDataStore.incrementQuantity(for: currentItem)
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.black)
+                            .frame(width: 34, height: 34)
+                            .background(WomenLuxuryTheme.roseGold)
+                            .clipShape(Circle())
+                    }
+                }
+            }
+
             if let last = currentItem.lastWornDate {
                 Text("Last styled on: \(last.formatted(date: .abbreviated, time: .omitted))")
                     .font(.system(size: 11))

@@ -21,8 +21,12 @@ public struct WomenAddEditItemView: View {
     @State private var occasion: String = "Festive"
     @State private var notes: String = ""
     @State private var storeUrl: String = ""
+    @State private var quantity: Int = 1
+    @State private var timesWorn: Int = 0
 
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
+    @State private var showScannerSheet: Bool = false
+    @State private var showWebImportSheet: Bool = false
 
     public init(womenDataStore: WomenDataStore, existingItem: WomenWardrobeItem? = nil) {
         self.womenDataStore = womenDataStore
@@ -43,6 +47,8 @@ public struct WomenAddEditItemView: View {
             _occasion = State(initialValue: item.occasion)
             _notes = State(initialValue: item.notes)
             _storeUrl = State(initialValue: item.storeUrl)
+            _quantity = State(initialValue: max(1, item.quantity))
+            _timesWorn = State(initialValue: item.timesWorn)
         }
     }
 
@@ -55,6 +61,8 @@ public struct WomenAddEditItemView: View {
                     photosSection
 
                     coreDetailsSection
+
+                    ownershipAndWearSection
 
                     sizingSection
 
@@ -89,6 +97,19 @@ public struct WomenAddEditItemView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                }
+            }
+            .sheet(isPresented: $showScannerSheet) {
+                QRCodeScannerView(
+                    title: "Scan Boutique Barcode / QR",
+                    subtitle: "Scan product box barcode, tag, or store QR code"
+                ) { code in
+                    handleScannedCode(code)
+                }
+            }
+            .sheet(isPresented: $showWebImportSheet) {
+                WebImportSheet { imported in
+                    applyImportedData(imported)
                 }
             }
         }
@@ -178,36 +199,66 @@ public struct WomenAddEditItemView: View {
                 }
             }
 
-            PhotosPicker(
-                selection: $selectedPhotosPickerItems,
-                maxSelectionCount: 6,
-                matching: .images
-            ) {
-                HStack {
-                    Image(systemName: "photo.on.rectangle")
-                    Text("Select from Photos")
-                        .font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 8) {
+                PhotosPicker(
+                    selection: $selectedPhotosPickerItems,
+                    maxSelectionCount: 6,
+                    matching: .images
+                ) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "photo.on.rectangle")
+                        Text("Gallery")
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(WomenLuxuryTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.cardBorder, lineWidth: 1))
                 }
-                .foregroundStyle(WomenLuxuryTheme.roseGold)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(WomenLuxuryTheme.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.cardBorder, lineWidth: 1))
-            }
-            .onChange(of: selectedPhotosPickerItems) {
-                Task {
-                    for item in selectedPhotosPickerItems {
-                        if let data = try? await item.loadTransferable(type: Data.self),
-                           let filename = ImageManager.shared.saveImageData(data) {
-                            await MainActor.run {
-                                photos.append(filename)
+                .onChange(of: selectedPhotosPickerItems) {
+                    Task {
+                        for item in selectedPhotosPickerItems {
+                            if let data = try? await item.loadTransferable(type: Data.self),
+                               let filename = ImageManager.shared.saveImageData(data) {
+                                await MainActor.run {
+                                    photos.append(filename)
+                                }
                             }
                         }
+                        await MainActor.run {
+                            selectedPhotosPickerItems.removeAll()
+                        }
                     }
-                    await MainActor.run {
-                        selectedPhotosPickerItems.removeAll()
+                }
+
+                Button(action: { showScannerSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "barcode.viewfinder")
+                        Text("Scan QR")
                     }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WomenLuxuryTheme.champagne)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(WomenLuxuryTheme.champagne.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.champagne.opacity(0.4), lineWidth: 1))
+                }
+
+                Button(action: { showWebImportSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                        Text("Import")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(WomenLuxuryTheme.roseGold.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.roseGold.opacity(0.4), lineWidth: 1))
                 }
             }
         }
@@ -374,9 +425,11 @@ public struct WomenAddEditItemView: View {
             updated.occasion = occasion
             updated.notes = notes
             updated.storeUrl = storeUrl
+            updated.quantity = max(1, quantity)
+            updated.timesWorn = timesWorn
             womenDataStore.updateItem(updated)
         } else {
-            let item = WomenWardrobeItem(
+            var item = WomenWardrobeItem(
                 title: cleanTitle,
                 category: category,
                 subcategory: subcategory,
@@ -394,8 +447,151 @@ public struct WomenAddEditItemView: View {
                 notes: notes,
                 storeUrl: storeUrl
             )
+            item.quantity = max(1, quantity)
+            item.timesWorn = timesWorn
             womenDataStore.addItem(item, ignoreDuplicates: true)
         }
         dismiss()
+    }
+
+    private func handleScannedCode(_ code: String) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            storeUrl = trimmed
+            Task {
+                if let imported = try? await WebProductImporter.shared.importFromUrl(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(imported)
+                    }
+                }
+            }
+        } else {
+            if notes.isEmpty {
+                notes = "Barcode / SKU: \(trimmed)"
+            } else if !notes.contains(trimmed) {
+                notes += "\nBarcode: \(trimmed)"
+            }
+
+            // AUTOMATIC SEARCH: Search online product databases for barcode
+            Task {
+                if let product = await WebProductImporter.shared.searchProductByBarcode(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(product)
+                    }
+                } else {
+                    await MainActor.run {
+                        if title.isEmpty {
+                            title = "Scanned Piece \(trimmed)"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var ownershipAndWearSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Ownership & Wear History")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(WomenLuxuryTheme.textPrimary)
+
+            HStack(spacing: 12) {
+                // Number of Pairs / Identical Items Owned
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PAIRS / QTY OWNED")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                    HStack {
+                        Button {
+                            if quantity > 1 { quantity -= 1 }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text("\(quantity) \(category == .fineJewelry ? "Pairs/Sets" : "Items")")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Button {
+                            quantity += 1
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(WomenLuxuryTheme.roseGold)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(WomenLuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .frame(maxWidth: .infinity)
+
+                // Times Worn
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("TIMES WORN")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                    HStack {
+                        Button {
+                            if timesWorn > 0 { timesWorn -= 1 }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text("\(timesWorn)x")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+
+                        Spacer()
+
+                        Button {
+                            timesWorn += 1
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(WomenLuxuryTheme.roseGold)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(WomenLuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(16)
+        .womenLuxuryCardStyle(cornerRadius: 16)
+    }
+
+    private func applyImportedData(_ imported: ImportedProductData) {
+        if !imported.name.isEmpty { title = imported.name }
+        if !imported.brand.isEmpty { brand = imported.brand }
+        if imported.price > 0 { priceText = "\(Int(imported.price))" }
+        for photo in imported.photoFilenames {
+            if !photos.contains(photo) {
+                photos.append(photo)
+            }
+        }
+        if !imported.sourceUrl.isEmpty { storeUrl = imported.sourceUrl }
+        if !imported.notes.isEmpty {
+            notes = notes.isEmpty ? imported.notes : (notes + "\n" + imported.notes)
+        }
     }
 }

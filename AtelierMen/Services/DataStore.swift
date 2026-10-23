@@ -190,6 +190,47 @@ public final class DataStore: ObservableObject {
         }
     }
 
+    public func incrementWearCount(for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].timesWorn += 1
+            items[idx].lastWornDate = Date()
+            saveItems()
+        }
+    }
+
+    public func decrementWearCount(for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            if items[idx].timesWorn > 0 {
+                items[idx].timesWorn -= 1
+                saveItems()
+            }
+        }
+    }
+
+    public func markWoreToday(for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].timesWorn += 1
+            items[idx].lastWornDate = Date()
+            saveItems()
+        }
+    }
+
+    public func incrementQuantity(for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].quantity += 1
+            saveItems()
+        }
+    }
+
+    public func decrementQuantity(for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            if items[idx].quantity > 1 {
+                items[idx].quantity -= 1
+                saveItems()
+            }
+        }
+    }
+
     // MARK: - Wishlist CRUD & Duplicate Handling
     public func isDuplicateWishlistItem(_ item: WishlistItem) -> WishlistItem? {
         let cleanName = item.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

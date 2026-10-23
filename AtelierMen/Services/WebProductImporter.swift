@@ -614,4 +614,89 @@ public final class WebProductImporter {
             .replacingOccurrences(of: "&nbsp;", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    // MARK: - Barcode Automatic Product Lookup
+    public func searchProductByBarcode(_ rawBarcode: String) async -> ImportedProductData? {
+        let cleanBarcode = rawBarcode.filter { "0123456789".contains($0) }
+        guard cleanBarcode.count >= 6 else { return nil }
+
+        // Strategy 1: Open Food Facts / Open Beauty / Open Products Facts API
+        let openFactsEndpoints = [
+            "https://world.openbeautyfacts.org/api/v2/product/\(cleanBarcode).json",
+            "https://world.openproductsfacts.org/api/v2/product/\(cleanBarcode).json",
+            "https://world.openfoodfacts.org/api/v2/product/\(cleanBarcode).json"
+        ]
+
+        for endpointStr in openFactsEndpoints {
+            if let url = URL(string: endpointStr) {
+                var request = URLRequest(url: url)
+                request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 5
+
+                if let (data, response) = try? await URLSession.shared.data(for: request),
+                   (response as? HTTPURLResponse)?.statusCode == 200,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   (json["status"] as? Int) == 1,
+                   let product = json["product"] as? [String: Any] {
+
+                    var imported = ImportedProductData()
+                    let name = (product["product_name"] as? String) ?? (product["product_name_en"] as? String) ?? ""
+                    let brand = (product["brands"] as? String) ?? ""
+                    guard !name.isEmpty || !brand.isEmpty else { continue }
+
+                    imported.name = name.isEmpty ? "Product \(cleanBarcode)" : name
+                    imported.brand = brand
+                    imported.notes = "Scanned Barcode: \(cleanBarcode)"
+                    imported.sourceUrl = "https://world.openproductsfacts.org/product/\(cleanBarcode)"
+
+                    if let imgUrlStr = (product["image_front_url"] as? String) ?? (product["image_url"] as? String),
+                       let imgUrl = URL(string: imgUrlStr),
+                       let saved = await downloadAndSaveImage(from: imgUrl) {
+                        imported.photoFilenames = [saved]
+                    }
+                    return imported
+                }
+            }
+        }
+
+        // Strategy 2: UPCitemdb Trial API
+        if let upcUrl = URL(string: "https://api.upcitemdb.com/prod/trial/lookup?upc=\(cleanBarcode)") {
+            var request = URLRequest(url: upcUrl)
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            request.timeoutInterval = 5
+
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let items = json["items"] as? [[String: Any]],
+               let first = items.first {
+
+                var imported = ImportedProductData()
+                imported.name = (first["title"] as? String) ?? "Scanned Item"
+                imported.brand = (first["brand"] as? String) ?? ""
+                if let price = first["lowest_recorded_price"] as? Double, price > 0 {
+                    imported.price = price * 85.0 // Convert USD to INR
+                }
+                imported.notes = "Scanned Barcode: \(cleanBarcode)"
+                imported.sourceUrl = "https://www.upcitemdb.com/upc/\(cleanBarcode)"
+
+                if let images = first["images"] as? [String], let firstImgStr = images.first,
+                   let imgUrl = URL(string: firstImgStr),
+                   let saved = await downloadAndSaveImage(from: imgUrl) {
+                    imported.photoFilenames = [saved]
+                }
+                return imported
+            }
+        }
+
+        // Strategy 3: Search Amazon India via Barcode Keyword
+        let amazonSearchUrl = "https://www.amazon.in/s?k=\(cleanBarcode)"
+        if let data = try? await importFromUrl(amazonSearchUrl), !data.name.isEmpty {
+            var updated = data
+            updated.notes = (updated.notes.isEmpty ? "" : updated.notes + "\n") + "Scanned Barcode: \(cleanBarcode)"
+            return updated
+        }
+
+        return nil
+    }
 }

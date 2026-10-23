@@ -7,6 +7,7 @@ public struct WishlistView: View {
     @State private var selectedCategory: ItemCategory? = nil
     @State private var showAddWishlistSheet = false
     @State private var showWebImportSheet = false
+    @State private var showScannerSheet = false
     @State private var itemToMoveToVault: WishlistItem? = nil
     @State private var storageLocationForMove = "Main Closet"
 
@@ -136,6 +137,9 @@ public struct WishlistView: View {
                                 }
 
                                 Menu {
+                                    Button(action: { showScannerSheet = true }) {
+                                        Label("Scan Barcode / QR", systemImage: "barcode.viewfinder")
+                                    }
                                     Button(action: { cleanWishlistDuplicatesAction() }) {
                                         Label("Remove Duplicates", systemImage: "sparkles")
                                     }
@@ -219,6 +223,14 @@ public struct WishlistView: View {
                     } else {
                         showToast("Item already in Wishlist — duplicate ignored & merged")
                     }
+                }
+            }
+            .sheet(isPresented: $showScannerSheet) {
+                QRCodeScannerView(
+                    title: "Scan Wishlist Barcode / QR",
+                    subtitle: "Scan product box barcode or web QR link to add to your wishlist"
+                ) { code in
+                    handleWishlistQuickScan(code)
                 }
             }
             .sheet(item: $selectedDetailItem) { item in
@@ -588,6 +600,87 @@ public struct WishlistView: View {
         }
     }
 
+    private func handleWishlistQuickScan(_ code: String) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            Task {
+                if let imported = try? await WebProductImporter.shared.importFromUrl(trimmed) {
+                    await MainActor.run {
+                        let wish = WishlistItem(
+                            name: imported.name,
+                            brand: imported.brand,
+                            category: imported.category,
+                            targetPrice: imported.price,
+                            photos: imported.photoFilenames,
+                            storeUrl: imported.sourceUrl,
+                            priority: .high,
+                            notes: imported.notes
+                        )
+                        let added = dataStore.addWishlistItem(wish, ignoreDuplicates: true)
+                        if added {
+                            showToast("Added \(wish.name) to Wishlist")
+                        } else {
+                            showToast("Item already in Wishlist — duplicate merged")
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        let wish = WishlistItem(
+                            name: "Scanned Web Item",
+                            brand: "Imported Link",
+                            category: .accessories,
+                            targetPrice: 0.0,
+                            storeUrl: trimmed,
+                            priority: .high
+                        )
+                        dataStore.addWishlistItem(wish, ignoreDuplicates: true)
+                        showToast("Added Link to Wishlist")
+                    }
+                }
+            }
+        } else {
+            // AUTOMATIC SEARCH: Search online product databases for barcode
+            showToast("Searching product database for \(trimmed)...")
+            Task {
+                if let imported = await WebProductImporter.shared.searchProductByBarcode(trimmed) {
+                    await MainActor.run {
+                        let wish = WishlistItem(
+                            name: imported.name,
+                            brand: imported.brand,
+                            category: imported.category,
+                            targetPrice: imported.price,
+                            photos: imported.photoFilenames,
+                            storeUrl: imported.sourceUrl,
+                            priority: .high,
+                            notes: imported.notes
+                        )
+                        let added = dataStore.addWishlistItem(wish, ignoreDuplicates: true)
+                        if added {
+                            showToast("Found & added \(wish.name) to Wishlist")
+                        } else {
+                            showToast("Item already in Wishlist — duplicate merged")
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        let wish = WishlistItem(
+                            name: "Scanned Item \(trimmed)",
+                            brand: "Barcode",
+                            category: .accessories,
+                            targetPrice: 0.0,
+                            priority: .high,
+                            notes: "Barcode: \(trimmed)"
+                        )
+                        dataStore.addWishlistItem(wish, ignoreDuplicates: true)
+                        showToast("Added Barcode \(trimmed) to Wishlist")
+                    }
+                }
+            }
+        }
+    }
+
     private var emptyWishlistView: some View {
         VStack(spacing: 12) {
             Image(systemName: "bookmark")
@@ -625,6 +718,7 @@ public struct AddWishlistItemSheet: View {
     @State private var photos: [String] = []
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
     @State private var showWebImportSheet = false
+    @State private var showScannerSheet = false
 
     public init(dataStore: DataStore, existingItem: WishlistItem? = nil) {
         self.dataStore = dataStore
@@ -692,6 +786,14 @@ public struct AddWishlistItemSheet: View {
             .sheet(isPresented: $showWebImportSheet) {
                 WebImportSheet { imported in
                     applyImportedData(imported)
+                }
+            }
+            .sheet(isPresented: $showScannerSheet) {
+                QRCodeScannerView(
+                    title: "Scan Wishlist Item Code",
+                    subtitle: "Scan box barcode or website QR code to fill item details"
+                ) { code in
+                    handleScannedCode(code)
                 }
             }
         }
@@ -782,17 +884,17 @@ public struct AddWishlistItemSheet: View {
                 }
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 PhotosPicker(
                     selection: $selectedPhotosPickerItems,
                     maxSelectionCount: 6,
                     matching: .images
                 ) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: "photo.on.rectangle")
                         Text("Gallery")
                     }
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(LuxuryTheme.textPrimary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
@@ -813,12 +915,29 @@ public struct AddWishlistItemSheet: View {
                     }
                 }
 
-                Button(action: { showWebImportSheet = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "globe")
-                        Text("Amazon / Web")
+                Button(action: { showScannerSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "barcode.viewfinder")
+                        Text("Scan QR")
                     }
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(LuxuryTheme.accentGold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(LuxuryTheme.accentGold.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(LuxuryTheme.accentGold.opacity(0.4), lineWidth: 1)
+                    )
+                }
+
+                Button(action: { showWebImportSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                        Text("Amazon")
+                    }
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(LuxuryTheme.accentAmber)
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
@@ -980,5 +1099,42 @@ public struct AddWishlistItemSheet: View {
             dataStore.addWishlistItem(item, ignoreDuplicates: true)
         }
         dismiss()
+    }
+
+    private func handleScannedCode(_ code: String) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            storeUrl = trimmed
+            Task {
+                if let imported = try? await WebProductImporter.shared.importFromUrl(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(imported)
+                    }
+                }
+            }
+        } else {
+            if notes.isEmpty {
+                notes = "Barcode: \(trimmed)"
+            } else if !notes.contains(trimmed) {
+                notes += "\nBarcode: \(trimmed)"
+            }
+
+            // AUTOMATIC SEARCH: Search online product databases for barcode
+            Task {
+                if let product = await WebProductImporter.shared.searchProductByBarcode(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(product)
+                    }
+                } else {
+                    await MainActor.run {
+                        if name.isEmpty {
+                            name = "Scanned Item \(trimmed)"
+                        }
+                    }
+                }
+            }
+        }
     }
 }

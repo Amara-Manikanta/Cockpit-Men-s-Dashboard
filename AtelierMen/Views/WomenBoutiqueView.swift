@@ -517,6 +517,16 @@ public struct WomenBoutiqueView: View {
                             .background(WomenLuxuryTheme.champagne)
                             .clipShape(Capsule())
                     }
+
+                    if item.quantity > 1 {
+                        Text("\(item.quantity) PAIRS")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(Color.black)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(WomenLuxuryTheme.roseGold)
+                            .clipShape(Capsule())
+                    }
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

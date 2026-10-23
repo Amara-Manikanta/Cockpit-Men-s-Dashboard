@@ -16,6 +16,8 @@ public struct WomenAddWishlistItemSheet: View {
     @State private var notes: String = ""
     @State private var photos: [String] = []
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
+    @State private var showScannerSheet: Bool = false
+    @State private var showWebImportSheet: Bool = false
 
     public init(womenDataStore: WomenDataStore, existingItem: WomenWishlistItem? = nil) {
         self.womenDataStore = womenDataStore
@@ -74,6 +76,19 @@ public struct WomenAddWishlistItemSheet: View {
                         .foregroundStyle(WomenLuxuryTheme.textSecondary)
                 }
             }
+            .sheet(isPresented: $showScannerSheet) {
+                QRCodeScannerView(
+                    title: "Scan Wishlist Barcode / QR",
+                    subtitle: "Scan dress tag barcode or shopping QR code to add goal"
+                ) { code in
+                    handleScannedCode(code)
+                }
+            }
+            .sheet(isPresented: $showWebImportSheet) {
+                WebImportSheet { imported in
+                    applyImportedData(imported)
+                }
+            }
         }
     }
 
@@ -130,36 +145,66 @@ public struct WomenAddWishlistItemSheet: View {
                 }
             }
 
-            PhotosPicker(
-                selection: $selectedPhotosPickerItems,
-                maxSelectionCount: 6,
-                matching: .images
-            ) {
-                HStack {
-                    Image(systemName: "photo.on.rectangle")
-                    Text("Select from Photos")
-                        .font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 8) {
+                PhotosPicker(
+                    selection: $selectedPhotosPickerItems,
+                    maxSelectionCount: 6,
+                    matching: .images
+                ) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "photo.on.rectangle")
+                        Text("Gallery")
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(WomenLuxuryTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.cardBorder, lineWidth: 1))
                 }
-                .foregroundStyle(WomenLuxuryTheme.roseGold)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(WomenLuxuryTheme.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.cardBorder, lineWidth: 1))
-            }
-            .onChange(of: selectedPhotosPickerItems) {
-                Task {
-                    for item in selectedPhotosPickerItems {
-                        if let data = try? await item.loadTransferable(type: Data.self),
-                           let filename = ImageManager.shared.saveImageData(data) {
-                            await MainActor.run {
-                                photos.append(filename)
+                .onChange(of: selectedPhotosPickerItems) {
+                    Task {
+                        for item in selectedPhotosPickerItems {
+                            if let data = try? await item.loadTransferable(type: Data.self),
+                               let filename = ImageManager.shared.saveImageData(data) {
+                                await MainActor.run {
+                                    photos.append(filename)
+                                }
                             }
                         }
+                        await MainActor.run {
+                            selectedPhotosPickerItems.removeAll()
+                        }
                     }
-                    await MainActor.run {
-                        selectedPhotosPickerItems.removeAll()
+                }
+
+                Button(action: { showScannerSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "barcode.viewfinder")
+                        Text("Scan QR")
                     }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WomenLuxuryTheme.champagne)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(WomenLuxuryTheme.champagne.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.champagne.opacity(0.4), lineWidth: 1))
+                }
+
+                Button(action: { showWebImportSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                        Text("Import")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(WomenLuxuryTheme.roseGold.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.roseGold.opacity(0.4), lineWidth: 1))
                 }
             }
         }
@@ -267,5 +312,57 @@ public struct WomenAddWishlistItemSheet: View {
             womenDataStore.addWishlistItem(item, ignoreDuplicates: true)
         }
         dismiss()
+    }
+
+    private func handleScannedCode(_ code: String) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            storeUrl = trimmed
+            Task {
+                if let imported = try? await WebProductImporter.shared.importFromUrl(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(imported)
+                    }
+                }
+            }
+        } else {
+            if notes.isEmpty {
+                notes = "Barcode / SKU: \(trimmed)"
+            } else if !notes.contains(trimmed) {
+                notes += "\nBarcode: \(trimmed)"
+            }
+
+            // AUTOMATIC SEARCH: Search online product databases for barcode
+            Task {
+                if let product = await WebProductImporter.shared.searchProductByBarcode(trimmed) {
+                    await MainActor.run {
+                        applyImportedData(product)
+                    }
+                } else {
+                    await MainActor.run {
+                        if title.isEmpty {
+                            title = "Scanned Goal \(trimmed)"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func applyImportedData(_ imported: ImportedProductData) {
+        if !imported.name.isEmpty { title = imported.name }
+        if !imported.brand.isEmpty { brand = imported.brand }
+        if imported.price > 0 { priceText = "\(Int(imported.price))" }
+        for photo in imported.photoFilenames {
+            if !photos.contains(photo) {
+                photos.append(photo)
+            }
+        }
+        if !imported.sourceUrl.isEmpty { storeUrl = imported.sourceUrl }
+        if !imported.notes.isEmpty {
+            notes = notes.isEmpty ? imported.notes : (notes + "\n" + imported.notes)
+        }
     }
 }

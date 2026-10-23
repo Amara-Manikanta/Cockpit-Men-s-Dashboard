@@ -28,6 +28,7 @@ public struct VaultView: View {
     @State private var selectedDetailItem: WardrobeItem? = nil
     @State private var itemToEdit: WardrobeItem? = nil
     @State private var showAddItemSheet = false
+    @State private var showScannerSheet = false
     @AppStorage("vault_show_import") private var showWebImportSheet = false
 
     // Backup & Restore
@@ -271,6 +272,9 @@ public struct VaultView: View {
                                     Divider()
                                     Button(action: { cleanDuplicatesAction() }) {
                                         Label("Remove Duplicates", systemImage: "sparkles")
+                                    }
+                                    Button(action: { showScannerSheet = true }) {
+                                        Label("Scan QR / Barcode", systemImage: "barcode.viewfinder")
                                     }
                                     Button(action: { showWebImportSheet = true }) {
                                         Label("Import from Web", systemImage: "globe")

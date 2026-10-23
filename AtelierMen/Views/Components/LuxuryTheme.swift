@@ -20,6 +20,7 @@ public struct LuxuryTheme {
 
     // Backwards-compatible alias for existing code
     public static var gold: Color { accentAmber }
+    public static var accentGold: Color { accentAmber }
 }
 
 public struct LuxuryCardModifier: ViewModifier {
