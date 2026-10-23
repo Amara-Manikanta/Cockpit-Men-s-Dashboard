@@ -44,6 +44,7 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
     public var timesWorn: Int // No of times worn
     public var lastWornDate: Date?
     public var quantity: Int // No of pairs / identical items owned (default 1)
+    public var wearHistory: [Date] // Timestamps of each logged wear
 
     public init(
         id: UUID = UUID(),
@@ -74,7 +75,8 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         accessoryMaterial: String = "",
         timesWorn: Int = 0,
         lastWornDate: Date? = nil,
-        quantity: Int = 1
+        quantity: Int = 1,
+        wearHistory: [Date] = []
     ) {
         self.id = id
         self.name = name
@@ -105,6 +107,12 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         self.timesWorn = timesWorn
         self.lastWornDate = lastWornDate
         self.quantity = max(1, quantity)
+        self.wearHistory = wearHistory
+    }
+
+    // MARK: - Repeat Wear Intelligence
+    public var repeatWearStatus: RepeatWearStatus {
+        RepeatWearStatus.calculate(timesWorn: timesWorn, lastWornDate: lastWornDate)
     }
 
     public var costPerWear: Double {
@@ -200,5 +208,6 @@ public struct WardrobeItem: Identifiable, Codable, Equatable {
         timesWorn = try container.decodeIfPresent(Int.self, forKey: .timesWorn) ?? 0
         lastWornDate = try container.decodeIfPresent(Date.self, forKey: .lastWornDate)
         quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
+        wearHistory = try container.decodeIfPresent([Date].self, forKey: .wearHistory) ?? []
     }
 }

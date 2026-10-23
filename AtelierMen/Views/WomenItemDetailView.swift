@@ -198,6 +198,20 @@ public struct WomenItemDetailView: View {
         .womenLuxuryCardStyle(cornerRadius: 16)
     }
 
+    private func repeatStatusBadge(_ status: RepeatWearStatus) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: status.iconName)
+                .font(.system(size: 9))
+            Text(status.badgeText)
+                .font(.system(size: 9, weight: .bold))
+        }
+        .foregroundStyle(status.isRepeatWarning ? Color.white : Color.black)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(status.color.opacity(status.isRepeatWarning ? 0.95 : 0.85))
+        .clipShape(Capsule())
+    }
+
     // MARK: - Wear & Aging Card
     private var wearAndAgingCard: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -211,13 +225,44 @@ public struct WomenItemDetailView: View {
 
                 Spacer()
 
-                Text(currentItem.wearAgingStatus.label)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(currentItem.wearAgingStatus.color)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(currentItem.wearAgingStatus.color.opacity(0.15))
-                    .clipShape(Capsule())
+                HStack(spacing: 6) {
+                    repeatStatusBadge(currentItem.repeatWearStatus)
+
+                    Text(currentItem.wearAgingStatus.label)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(currentItem.wearAgingStatus.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(currentItem.wearAgingStatus.color.opacity(0.15))
+                        .clipShape(Capsule())
+                }
+            }
+
+            // Repeat Wear Warning Alert
+            if let warning = currentItem.repeatWearStatus.warningBannerMessage {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(currentItem.repeatWearStatus.color)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(currentItem.repeatWearStatus.badgeText)
+                            .font(.system(size: 10, weight: .black, design: .monospaced))
+                            .foregroundStyle(currentItem.repeatWearStatus.color)
+
+                        Text(warning)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(currentItem.repeatWearStatus.color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(currentItem.repeatWearStatus.color.opacity(0.35), lineWidth: 1)
+                )
             }
 
             HStack(spacing: 16) {

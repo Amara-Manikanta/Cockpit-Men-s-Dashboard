@@ -117,6 +117,7 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
     public var dateAdded: Date
     public var isFavorite: Bool
     public var quantity: Int // No of pairs / identical pieces owned (default 1)
+    public var wearHistory: [Date]
 
     public init(
         id: UUID = UUID(),
@@ -140,7 +141,8 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         lastWornDate: Date? = nil,
         dateAdded: Date = Date(),
         isFavorite: Bool = false,
-        quantity: Int = 1
+        quantity: Int = 1,
+        wearHistory: [Date] = []
     ) {
         self.id = id
         self.title = title
@@ -164,6 +166,7 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         self.dateAdded = dateAdded
         self.isFavorite = isFavorite
         self.quantity = max(1, quantity)
+        self.wearHistory = wearHistory
     }
 
     public init(from decoder: Decoder) throws {
@@ -190,6 +193,12 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
+        wearHistory = try container.decodeIfPresent([Date].self, forKey: .wearHistory) ?? []
+    }
+
+    // MARK: - Repeat Wear Intelligence
+    public var repeatWearStatus: RepeatWearStatus {
+        RepeatWearStatus.calculate(timesWorn: timesWorn, lastWornDate: lastWornDate)
     }
 
     public var primaryPhoto: String {

@@ -181,6 +181,21 @@ public struct ItemCardView: View {
                 .foregroundStyle(LuxuryTheme.textSecondary)
                 .padding(.top, 1)
 
+                // Repeat Wear Alert Pill if worn recently
+                if item.repeatWearStatus.isRepeatWarning {
+                    HStack(spacing: 3) {
+                        Image(systemName: item.repeatWearStatus.iconName)
+                            .font(.system(size: 8))
+                        Text(item.repeatWearStatus.badgeText)
+                            .font(.system(size: 9, weight: .black))
+                    }
+                    .foregroundStyle(item.repeatWearStatus.color)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(item.repeatWearStatus.color.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+
                 // Key Spec Pill
                 HStack(spacing: 4) {
                     Image(systemName: item.category.iconName)

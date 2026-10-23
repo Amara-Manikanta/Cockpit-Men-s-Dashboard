@@ -18,6 +18,7 @@ public struct WomenBoutiqueView: View {
     @State private var selectedDetailItem: WomenWardrobeItem? = nil
     @State private var itemToEdit: WomenWardrobeItem? = nil
     @State private var showAddItemSheet = false
+    @State private var showLogTodaySheet = false
 
     public init(womenDataStore: WomenDataStore, activeGenderProfile: Binding<String>) {
         self.womenDataStore = womenDataStore
@@ -60,6 +61,10 @@ public struct WomenBoutiqueView: View {
 
                         // Hero Valuation Card
                         heroValuationCard
+                            .padding(.horizontal)
+
+                        // Daily Outfit Log & Wear Intelligence Card
+                        dailyWearLogBanner
                             .padding(.horizontal)
 
                         // Search Bar
@@ -162,6 +167,10 @@ public struct WomenBoutiqueView: View {
                                 }
 
                                 Menu {
+                                    Button(action: { showLogTodaySheet = true }) {
+                                        Label("What Did You Wear Today? ✨", systemImage: "sparkles")
+                                    }
+                                    Divider()
                                     Button(action: {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                             activeGenderProfile = "male"
@@ -248,6 +257,11 @@ public struct WomenBoutiqueView: View {
             .sheet(isPresented: $showAddItemSheet) {
                 WomenAddEditItemView(womenDataStore: womenDataStore)
             }
+            .sheet(isPresented: $showLogTodaySheet) {
+                LogTodayOutfitSheet(womenDataStore: womenDataStore) { count in
+                    showToast("Logged \(count) pieces styled today! ✨")
+                }
+            }
         }
     }
 
@@ -289,6 +303,69 @@ public struct WomenBoutiqueView: View {
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(LuxuryTheme.accentAmber.opacity(0.4), lineWidth: 1))
             }
+        }
+    }
+
+    // MARK: - Daily Wear Log & Repeat Warning Banner
+    private var dailyWearLogBanner: some View {
+        Button(action: {
+            showLogTodaySheet = true
+        }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(WomenLuxuryTheme.roseGold.opacity(0.18))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18))
+                        .foregroundStyle(WomenLuxuryTheme.roseGold)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("WHAT DID YOU WEAR TODAY?")
+                            .font(.system(size: 11, weight: .black, design: .monospaced))
+                            .tracking(1.0)
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+
+                        if womenDataStore.items.contains(where: { $0.repeatWearStatus.isRepeatWarning }) {
+                            Text("REPEAT ALERT")
+                                .font(.system(size: 8, weight: .black))
+                                .foregroundStyle(Color.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.red)
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Text("Log today's look to track repeats & keep your style fresh.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    Text("Log")
+                        .font(.system(size: 12, weight: .bold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(WomenLuxuryTheme.roseGold)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(WomenLuxuryTheme.secondaryBackground)
+                .clipShape(Capsule())
+            }
+            .padding(12)
+            .background(WomenLuxuryTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(womenDataStore.items.contains(where: { $0.repeatWearStatus.isRepeatWarning }) ? Color.red.opacity(0.4) : WomenLuxuryTheme.cardBorder, lineWidth: 1)
+            )
         }
     }
 
@@ -527,6 +604,16 @@ public struct WomenBoutiqueView: View {
                             .background(WomenLuxuryTheme.roseGold)
                             .clipShape(Capsule())
                     }
+
+                    if item.repeatWearStatus.isRepeatWarning {
+                        Text(item.repeatWearStatus.badgeText)
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(item.repeatWearStatus.color.opacity(0.95))
+                            .clipShape(Capsule())
+                    }
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -573,6 +660,20 @@ public struct WomenBoutiqueView: View {
                 }
                 .foregroundStyle(WomenLuxuryTheme.textSecondary)
                 .padding(.top, 2)
+
+                if item.repeatWearStatus.isRepeatWarning {
+                    HStack(spacing: 3) {
+                        Image(systemName: item.repeatWearStatus.iconName)
+                            .font(.system(size: 8))
+                        Text(item.repeatWearStatus.badgeText)
+                            .font(.system(size: 9, weight: .black))
+                    }
+                    .foregroundStyle(item.repeatWearStatus.color)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(item.repeatWearStatus.color.opacity(0.12))
+                    .clipShape(Capsule())
+                }
             }
             .padding(10)
         }

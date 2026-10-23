@@ -6,6 +6,8 @@ public enum SortOption: String, CaseIterable, Identifiable {
     case priceHighToLow = "Valuation: High to Low"
     case priceLowToHigh = "Valuation: Low to High"
     case brandAZ = "Brand: A to Z"
+    case mostWorn = "Most Repeated / High Wear"
+    case leastWorn = "Least Worn / Forgotten Gems"
 
     public var id: String { rawValue }
 }
@@ -29,6 +31,7 @@ public struct VaultView: View {
     @State private var itemToEdit: WardrobeItem? = nil
     @State private var showAddItemSheet = false
     @State private var showScannerSheet = false
+    @State private var showLogTodaySheet = false
     @AppStorage("vault_show_import") private var showWebImportSheet = false
 
     // Backup & Restore
@@ -79,6 +82,10 @@ public struct VaultView: View {
             result.sort { $0.price < $1.price }
         case .brandAZ:
             result.sort { $0.brand.localizedCompare($1.brand) == .orderedAscending }
+        case .mostWorn:
+            result.sort { $0.timesWorn > $1.timesWorn }
+        case .leastWorn:
+            result.sort { $0.timesWorn < $1.timesWorn }
         }
 
         return result
@@ -135,6 +142,10 @@ public struct VaultView: View {
                         portfolioValuationCard
                             .padding(.horizontal)
                             .padding(.top, activeGenderProfile == nil ? 4 : 0)
+
+                        // Daily Outfit Log & Wear Intelligence Card
+                        dailyWearLogBanner
+                            .padding(.horizontal)
 
                         // Search Bar
                         searchBarSection
@@ -263,6 +274,10 @@ public struct VaultView: View {
                                 }
 
                                 Menu {
+                                    Button(action: { showLogTodaySheet = true }) {
+                                        Label("What Did You Wear Today? ✨", systemImage: "sparkles")
+                                    }
+                                    Divider()
                                     Button(action: { exportBackup() }) {
                                         Label("Export Backup / Save to Files", systemImage: "square.and.arrow.up")
                                     }
@@ -373,6 +388,11 @@ public struct VaultView: View {
             }
             .sheet(isPresented: $showAddItemSheet) {
                 AddEditItemView(dataStore: dataStore)
+            }
+            .sheet(isPresented: $showLogTodaySheet) {
+                LogTodayOutfitSheet(dataStore: dataStore) { count in
+                    showToast("Logged \(count) pieces worn today! ✨")
+                }
             }
             .sheet(isPresented: $showWebImportSheet) {
                 WebImportSheet { imported in
@@ -518,6 +538,69 @@ public struct VaultView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Daily Wear Log & Repeat Warning Banner
+    private var dailyWearLogBanner: some View {
+        Button(action: {
+            showLogTodaySheet = true
+        }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(LuxuryTheme.accentAmber.opacity(0.18))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18))
+                        .foregroundStyle(LuxuryTheme.accentAmber)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("WHAT DID YOU WEAR TODAY?")
+                            .font(.system(size: 11, weight: .black, design: .monospaced))
+                            .tracking(1.0)
+                            .foregroundStyle(LuxuryTheme.textPrimary)
+
+                        if dataStore.items.contains(where: { $0.repeatWearStatus.isRepeatWarning }) {
+                            Text("REPEAT ALERT")
+                                .font(.system(size: 8, weight: .black))
+                                .foregroundStyle(Color.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.red)
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Text("Log today's look to track repeats & keep your style fresh.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(LuxuryTheme.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    Text("Log")
+                        .font(.system(size: 12, weight: .bold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(LuxuryTheme.accentAmber)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(LuxuryTheme.secondaryBackground)
+                .clipShape(Capsule())
+            }
+            .padding(12)
+            .background(LuxuryTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(dataStore.items.contains(where: { $0.repeatWearStatus.isRepeatWarning }) ? Color.red.opacity(0.4) : LuxuryTheme.cardBorder, lineWidth: 1)
+            )
         }
     }
 

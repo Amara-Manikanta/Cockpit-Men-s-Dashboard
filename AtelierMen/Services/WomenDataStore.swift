@@ -141,12 +141,24 @@ public final class WomenDataStore: ObservableObject {
         }
     }
 
-    public func markWoreToday(for item: WomenWardrobeItem) {
+    public func markWoreToday(for item: WomenWardrobeItem, date: Date = Date()) {
         if let idx = items.firstIndex(where: { $0.id == item.id }) {
             items[idx].timesWorn += 1
-            items[idx].lastWornDate = Date()
+            items[idx].lastWornDate = date
+            items[idx].wearHistory.append(date)
             saveItems()
         }
+    }
+
+    public func logOutfitWorn(itemIds: Set<UUID>, date: Date = Date()) {
+        for id in itemIds {
+            if let idx = items.firstIndex(where: { $0.id == id }) {
+                items[idx].timesWorn += 1
+                items[idx].lastWornDate = date
+                items[idx].wearHistory.append(date)
+            }
+        }
+        saveItems()
     }
 
     public func incrementQuantity(for item: WomenWardrobeItem) {
