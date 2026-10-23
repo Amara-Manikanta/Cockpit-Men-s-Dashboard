@@ -234,6 +234,15 @@ public final class DataStore: ObservableObject {
         }
     }
 
+    public func updateReview(quality: Int, durability: Int, reviewNotes: String, for item: WardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].qualityRating = min(5, max(0, quality))
+            items[idx].durabilityRating = min(5, max(0, durability))
+            items[idx].reviewNotes = reviewNotes
+            saveItems()
+        }
+    }
+
     public func incrementQuantity(for item: WardrobeItem) {
         if let idx = items.firstIndex(where: { $0.id == item.id }) {
             items[idx].quantity += 1
@@ -386,6 +395,13 @@ public final class DataStore: ObservableObject {
     public func addPackingItem(tripId: UUID, item: PackingItem) {
         if let idx = tripPlans.firstIndex(where: { $0.id == tripId }) {
             tripPlans[idx].items.append(item)
+            saveTrips()
+        }
+    }
+
+    public func addPackingItems(tripId: UUID, newItems: [PackingItem]) {
+        if let idx = tripPlans.firstIndex(where: { $0.id == tripId }) {
+            tripPlans[idx].items.append(contentsOf: newItems)
             saveTrips()
         }
     }

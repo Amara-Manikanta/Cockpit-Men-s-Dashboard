@@ -8,6 +8,8 @@ public struct ItemDetailView: View {
 
     @State private var selectedPhotoIndex = 0
     @State private var showDeleteConfirmation = false
+    @State private var isEditingReviewNotes = false
+    @State private var tempReviewNotes: String = ""
 
     public init(dataStore: DataStore, item: WardrobeItem, onEdit: @escaping (WardrobeItem) -> Void) {
         self.dataStore = dataStore
@@ -70,6 +72,10 @@ public struct ItemDetailView: View {
 
                     // Garment Condition & Wear Aging Card
                     garmentConditionAndAgingCard
+                        .padding(.horizontal)
+
+                    // Owner's Review & Verdict Card (Quality & Durability Stars)
+                    ownerReviewCard
                         .padding(.horizontal)
 
                     // Specifications Card
@@ -515,6 +521,118 @@ public struct ItemDetailView: View {
                 .padding(.bottom, 14)
             }
         }
+    }
+
+    // MARK: - Owner's Review & Verdict Card
+    private var ownerReviewCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "star.bubble.fill")
+                    .foregroundStyle(LuxuryTheme.gold)
+                Text("OWNER'S REVIEW & VERDICT")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(LuxuryTheme.textTertiary)
+
+                Spacer()
+
+                if currentItem.isReviewed, let avg = currentItem.formattedRating {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 10))
+                        Text(avg)
+                            .font(.system(size: 12, weight: .black, design: .rounded))
+                    }
+                    .foregroundStyle(Color.black)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(LuxuryTheme.gold)
+                    .clipShape(Capsule())
+                }
+            }
+
+            // Quality Star Rating
+            StarRatingView(
+                rating: Binding(
+                    get: { currentItem.qualityRating },
+                    set: { newVal in
+                        dataStore.updateReview(quality: newVal, durability: currentItem.durabilityRating, reviewNotes: currentItem.reviewNotes, for: currentItem)
+                    }
+                ),
+                title: "Material & Craft Quality",
+                subtitle: "Fabric, stitching & finish",
+                starColor: LuxuryTheme.gold
+            )
+
+            Divider()
+                .background(LuxuryTheme.cardBorder)
+
+            // Durability Star Rating
+            StarRatingView(
+                rating: Binding(
+                    get: { currentItem.durabilityRating },
+                    set: { newVal in
+                        dataStore.updateReview(quality: currentItem.qualityRating, durability: newVal, reviewNotes: currentItem.reviewNotes, for: currentItem)
+                    }
+                ),
+                title: "Wear & Longevity Durability",
+                subtitle: "Wash resilience & color retention",
+                starColor: Color(red: 0.25, green: 0.65, blue: 0.98)
+            )
+
+            Divider()
+                .background(LuxuryTheme.cardBorder)
+
+            // Review / Wear Comments
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Wear Comments & Longevity Notes")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(LuxuryTheme.textPrimary)
+                    Spacer()
+                    if isEditingReviewNotes {
+                        Button("Done") {
+                            dataStore.updateReview(quality: currentItem.qualityRating, durability: currentItem.durabilityRating, reviewNotes: tempReviewNotes, for: currentItem)
+                            isEditingReviewNotes = false
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(LuxuryTheme.accentAmber)
+                    } else {
+                        Button(currentItem.reviewNotes.isEmpty ? "+ Add Comment" : "Edit") {
+                            tempReviewNotes = currentItem.reviewNotes
+                            isEditingReviewNotes = true
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(LuxuryTheme.accentAmber)
+                    }
+                }
+
+                if isEditingReviewNotes {
+                    TextField("Notes on fit, comfort, wash shrink resistance...", text: $tempReviewNotes, axis: .vertical)
+                        .font(.system(size: 13))
+                        .foregroundStyle(LuxuryTheme.textPrimary)
+                        .padding(10)
+                        .background(LuxuryTheme.secondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .lineLimit(3...5)
+                } else if !currentItem.reviewNotes.isEmpty {
+                    Text("\"\(currentItem.reviewNotes)\"")
+                        .font(.system(size: 13, weight: .medium))
+                        .italic()
+                        .foregroundStyle(LuxuryTheme.textSecondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(LuxuryTheme.secondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    Text("No wear comments yet. Tap '+ Add Comment' to record how this garment fits or washes.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(LuxuryTheme.textTertiary)
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .luxuryCardStyle(cornerRadius: 16)
     }
 
     // MARK: - Specifications Card

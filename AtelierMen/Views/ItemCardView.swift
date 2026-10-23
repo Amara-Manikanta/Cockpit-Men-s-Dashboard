@@ -163,10 +163,27 @@ public struct ItemCardView: View {
                     .lineLimit(2)
                     .frame(height: 38, alignment: .topLeading)
 
-                // Price
-                Text(item.formattedPrice)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(LuxuryTheme.gold)
+                // Price & Rating Badge
+                HStack {
+                    Text(item.formattedPrice)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(LuxuryTheme.gold)
+
+                    if let rating = item.formattedRating {
+                        Spacer()
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                            Text(rating)
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                        }
+                        .foregroundStyle(LuxuryTheme.gold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(LuxuryTheme.gold.opacity(0.15))
+                        .clipShape(Capsule())
+                    }
+                }
 
                 // Wear count & cost per wear pill
                 HStack(spacing: 4) {

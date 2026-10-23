@@ -53,6 +53,11 @@ public struct AddEditItemView: View {
     @State private var timesWorn: Int = 0
     @State private var selectedCondition: GarmentCondition? = nil
 
+    // Quality, Durability & Review
+    @State private var qualityRating: Int = 0
+    @State private var durabilityRating: Int = 0
+    @State private var reviewNotes: String = ""
+
     public init(dataStore: DataStore, existingItem: WardrobeItem? = nil) {
         self.dataStore = dataStore
         self.existingItem = existingItem
@@ -82,6 +87,9 @@ public struct AddEditItemView: View {
 
                     // Notes
                     notesSection
+
+                    // Owner Review & Ratings (Quality & Durability Stars)
+                    reviewRatingSection
 
                     // Submit Button
                     saveButton
@@ -485,6 +493,9 @@ public struct AddEditItemView: View {
         quantity = item.quantity
         timesWorn = item.timesWorn
         selectedCondition = item.garmentCondition
+        qualityRating = item.qualityRating
+        durabilityRating = item.durabilityRating
+        reviewNotes = item.reviewNotes
     }
 
     // MARK: - Usage & Pairs Section
@@ -631,6 +642,57 @@ public struct AddEditItemView: View {
         .luxuryCardStyle(cornerRadius: 16)
     }
 
+    // MARK: - Review & Verdict Section
+    private var reviewRatingSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "star.bubble.fill")
+                    .foregroundStyle(LuxuryTheme.gold)
+                Text("Quality, Durability & Review")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(LuxuryTheme.textPrimary)
+            }
+
+            // Quality Star Rating
+            StarRatingView(
+                rating: $qualityRating,
+                title: "Material & Craft Quality",
+                subtitle: "Fabric, stitching & finish",
+                starColor: LuxuryTheme.gold
+            )
+
+            Divider()
+                .background(LuxuryTheme.cardBorder)
+
+            // Durability Star Rating
+            StarRatingView(
+                rating: $durabilityRating,
+                title: "Wear & Longevity Durability",
+                subtitle: "Wash resilience & color retention",
+                starColor: Color(red: 0.25, green: 0.65, blue: 0.98)
+            )
+
+            Divider()
+                .background(LuxuryTheme.cardBorder)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("WEAR & LONGEVITY COMMENTS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(LuxuryTheme.textTertiary)
+
+                TextField("Add comments on how it feels, shrinks or fades...", text: $reviewNotes, axis: .vertical)
+                    .font(.system(size: 13))
+                    .foregroundStyle(LuxuryTheme.textPrimary)
+                    .padding(12)
+                    .background(LuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .lineLimit(2...4)
+            }
+        }
+        .padding(16)
+        .luxuryCardStyle(cornerRadius: 16)
+    }
+
     private func saveItem() {
         let priceVal = Double(priceText.filter("0123456789.".contains)) ?? 0.0
 
@@ -668,6 +730,9 @@ public struct AddEditItemView: View {
         item.quantity = max(1, quantity)
         item.timesWorn = timesWorn
         item.garmentCondition = selectedCondition
+        item.qualityRating = qualityRating
+        item.durabilityRating = durabilityRating
+        item.reviewNotes = reviewNotes
 
         if existingItem == nil {
             dataStore.addItem(item)

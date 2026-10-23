@@ -24,6 +24,9 @@ public struct WomenAddEditItemView: View {
     @State private var quantity: Int = 1
     @State private var timesWorn: Int = 0
     @State private var selectedCondition: GarmentCondition? = nil
+    @State private var qualityRating: Int = 0
+    @State private var durabilityRating: Int = 0
+    @State private var reviewNotes: String = ""
 
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
     @State private var showScannerSheet: Bool = false
@@ -51,6 +54,9 @@ public struct WomenAddEditItemView: View {
             _quantity = State(initialValue: max(1, item.quantity))
             _timesWorn = State(initialValue: item.timesWorn)
             _selectedCondition = State(initialValue: item.garmentCondition)
+            _qualityRating = State(initialValue: item.qualityRating)
+            _durabilityRating = State(initialValue: item.durabilityRating)
+            _reviewNotes = State(initialValue: item.reviewNotes)
         }
     }
 
@@ -75,6 +81,9 @@ public struct WomenAddEditItemView: View {
                     locationAndOccasionSection
 
                     notesSection
+
+                    // Review & Ratings (Quality & Durability Stars)
+                    reviewRatingSection
 
                     Button(action: savePiece) {
                         Text(existingItem != nil ? "Save Changes ✨" : "Add to Boutique ✨")
@@ -430,6 +439,9 @@ public struct WomenAddEditItemView: View {
             updated.quantity = max(1, quantity)
             updated.timesWorn = timesWorn
             updated.garmentCondition = selectedCondition
+            updated.qualityRating = qualityRating
+            updated.durabilityRating = durabilityRating
+            updated.reviewNotes = reviewNotes
             womenDataStore.updateItem(updated)
         } else {
             var item = WomenWardrobeItem(
@@ -453,6 +465,9 @@ public struct WomenAddEditItemView: View {
             item.quantity = max(1, quantity)
             item.timesWorn = timesWorn
             item.garmentCondition = selectedCondition
+            item.qualityRating = qualityRating
+            item.durabilityRating = durabilityRating
+            item.reviewNotes = reviewNotes
             womenDataStore.addItem(item, ignoreDuplicates: true)
         }
         dismiss()
@@ -635,6 +650,57 @@ public struct WomenAddEditItemView: View {
                     .background(WomenLuxuryTheme.secondaryBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
+            }
+        }
+        .padding(16)
+        .womenLuxuryCardStyle(cornerRadius: 16)
+    }
+
+    // MARK: - Review & Verdict Section
+    private var reviewRatingSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "star.bubble.fill")
+                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                Text("Quality, Durability & Review")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WomenLuxuryTheme.textPrimary)
+            }
+
+            // Quality Star Rating
+            StarRatingView(
+                rating: $qualityRating,
+                title: "Material & Craft Quality",
+                subtitle: "Fabric, weave & finish",
+                starColor: WomenLuxuryTheme.roseGold
+            )
+
+            Divider()
+                .background(WomenLuxuryTheme.cardBorder)
+
+            // Durability Star Rating
+            StarRatingView(
+                rating: $durabilityRating,
+                title: "Wear & Longevity Durability",
+                subtitle: "Wash resilience & color retention",
+                starColor: Color(red: 0.85, green: 0.55, blue: 0.95)
+            )
+
+            Divider()
+                .background(WomenLuxuryTheme.cardBorder)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("WEAR & LONGEVITY COMMENTS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                TextField("Add comments on drape, fit, color resilience...", text: $reviewNotes, axis: .vertical)
+                    .font(.system(size: 13))
+                    .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                    .padding(12)
+                    .background(WomenLuxuryTheme.secondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .lineLimit(2...4)
             }
         }
         .padding(16)

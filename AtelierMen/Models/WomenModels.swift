@@ -120,6 +120,11 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
     public var wearHistory: [Date]
     public var garmentCondition: GarmentCondition? // Manual condition override: New, Medium, Old, Faded
 
+    // Quality, Durability & Owner Review
+    public var qualityRating: Int // 1-5 stars (0 = unrated)
+    public var durabilityRating: Int // 1-5 stars (0 = unrated)
+    public var reviewNotes: String // Comments on fabric, fit, longevity, wash resilience
+
     public init(
         id: UUID = UUID(),
         title: String,
@@ -144,7 +149,10 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         isFavorite: Bool = false,
         quantity: Int = 1,
         wearHistory: [Date] = [],
-        garmentCondition: GarmentCondition? = nil
+        garmentCondition: GarmentCondition? = nil,
+        qualityRating: Int = 0,
+        durabilityRating: Int = 0,
+        reviewNotes: String = ""
     ) {
         self.id = id
         self.title = title
@@ -170,6 +178,9 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         self.quantity = max(1, quantity)
         self.wearHistory = wearHistory
         self.garmentCondition = garmentCondition
+        self.qualityRating = min(5, max(0, qualityRating))
+        self.durabilityRating = min(5, max(0, durabilityRating))
+        self.reviewNotes = reviewNotes
     }
 
     public init(from decoder: Decoder) throws {
@@ -198,6 +209,30 @@ public struct WomenWardrobeItem: Identifiable, Codable, Equatable {
         quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
         wearHistory = try container.decodeIfPresent([Date].self, forKey: .wearHistory) ?? []
         garmentCondition = try container.decodeIfPresent(GarmentCondition.self, forKey: .garmentCondition)
+        qualityRating = try container.decodeIfPresent(Int.self, forKey: .qualityRating) ?? 0
+        durabilityRating = try container.decodeIfPresent(Int.self, forKey: .durabilityRating) ?? 0
+        reviewNotes = try container.decodeIfPresent(String.self, forKey: .reviewNotes) ?? ""
+    }
+
+    // MARK: - Owner Review Intelligence
+    public var isReviewed: Bool {
+        return qualityRating > 0 || durabilityRating > 0 || !reviewNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public var averageRating: Double? {
+        if qualityRating > 0 && durabilityRating > 0 {
+            return Double(qualityRating + durabilityRating) / 2.0
+        } else if qualityRating > 0 {
+            return Double(qualityRating)
+        } else if durabilityRating > 0 {
+            return Double(durabilityRating)
+        }
+        return nil
+    }
+
+    public var formattedRating: String? {
+        guard let avg = averageRating else { return nil }
+        return String(format: "%.1f", avg)
     }
 
     // MARK: - Condition & Aging Intelligence

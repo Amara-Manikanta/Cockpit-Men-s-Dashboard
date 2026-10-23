@@ -718,9 +718,26 @@ public struct WomenBoutiqueView: View {
                     .lineLimit(2)
                     .frame(height: 34, alignment: .topLeading)
 
-                Text(item.formattedPrice)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(WomenLuxuryTheme.champagne)
+                HStack {
+                    Text(item.formattedPrice)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(WomenLuxuryTheme.champagne)
+
+                    if let rating = item.formattedRating {
+                        Spacer()
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                            Text(rating)
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                        }
+                        .foregroundStyle(WomenLuxuryTheme.roseGold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(WomenLuxuryTheme.roseGold.opacity(0.18))
+                        .clipShape(Capsule())
+                    }
+                }
 
                 // Wear count & cost per wear pill
                 HStack(spacing: 4) {

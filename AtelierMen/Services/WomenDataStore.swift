@@ -168,6 +168,15 @@ public final class WomenDataStore: ObservableObject {
         }
     }
 
+    public func updateReview(quality: Int, durability: Int, reviewNotes: String, for item: WomenWardrobeItem) {
+        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+            items[idx].qualityRating = min(5, max(0, quality))
+            items[idx].durabilityRating = min(5, max(0, durability))
+            items[idx].reviewNotes = reviewNotes
+            saveItems()
+        }
+    }
+
     public func incrementQuantity(for item: WomenWardrobeItem) {
         if let idx = items.firstIndex(where: { $0.id == item.id }) {
             items[idx].quantity += 1
@@ -270,6 +279,16 @@ public final class WomenDataStore: ObservableObject {
         if let data = try? JSONEncoder().encode(looks) {
             try? data.write(to: looksFileUrl, options: .atomic)
         }
+    }
+
+    public func addTrip(_ trip: WomenTripPlan) {
+        trips.insert(trip, at: 0)
+        saveTrips()
+    }
+
+    public func deleteTrip(id: UUID) {
+        trips.removeAll { $0.id == id }
+        saveTrips()
     }
 
     public func saveTrips() {

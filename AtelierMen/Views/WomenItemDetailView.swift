@@ -8,6 +8,8 @@ public struct WomenItemDetailView: View {
 
     @State private var selectedPhotoIndex = 0
     @State private var showDeleteConfirmation = false
+    @State private var isEditingReviewNotes = false
+    @State private var tempReviewNotes: String = ""
 
     public init(
         womenDataStore: WomenDataStore,
@@ -40,6 +42,10 @@ public struct WomenItemDetailView: View {
 
                     // Garment Condition & Wear Aging Card
                     garmentConditionAndAgingCard
+                        .padding(.horizontal)
+
+                    // Owner's Review & Verdict Card (Quality & Durability Stars)
+                    ownerReviewCard
                         .padding(.horizontal)
 
                     // Specifications & Metal Card
@@ -528,6 +534,118 @@ public struct WomenItemDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(currentItem.effectiveCondition.color.opacity(currentItem.effectiveCondition.isOldOrFaded ? 0.14 : 0.08))
             .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .womenLuxuryCardStyle(cornerRadius: 16)
+    }
+
+    // MARK: - Owner's Review & Verdict Card
+    private var ownerReviewCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "star.bubble.fill")
+                    .foregroundStyle(WomenLuxuryTheme.roseGold)
+                Text("OWNER'S REVIEW & VERDICT")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(WomenLuxuryTheme.textTertiary)
+
+                Spacer()
+
+                if currentItem.isReviewed, let avg = currentItem.formattedRating {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 10))
+                        Text(avg)
+                            .font(.system(size: 12, weight: .black, design: .rounded))
+                    }
+                    .foregroundStyle(Color.black)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(WomenLuxuryTheme.roseGold)
+                    .clipShape(Capsule())
+                }
+            }
+
+            // Quality Star Rating
+            StarRatingView(
+                rating: Binding(
+                    get: { currentItem.qualityRating },
+                    set: { newVal in
+                        womenDataStore.updateReview(quality: newVal, durability: currentItem.durabilityRating, reviewNotes: currentItem.reviewNotes, for: currentItem)
+                    }
+                ),
+                title: "Material & Craft Quality",
+                subtitle: "Fabric, weave & finish",
+                starColor: WomenLuxuryTheme.roseGold
+            )
+
+            Divider()
+                .background(WomenLuxuryTheme.cardBorder)
+
+            // Durability Star Rating
+            StarRatingView(
+                rating: Binding(
+                    get: { currentItem.durabilityRating },
+                    set: { newVal in
+                        womenDataStore.updateReview(quality: currentItem.qualityRating, durability: newVal, reviewNotes: currentItem.reviewNotes, for: currentItem)
+                    }
+                ),
+                title: "Wear & Longevity Durability",
+                subtitle: "Wash resilience & color retention",
+                starColor: Color(red: 0.85, green: 0.55, blue: 0.95) // Lavender rose
+            )
+
+            Divider()
+                .background(WomenLuxuryTheme.cardBorder)
+
+            // Review / Wear Comments
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Wear Comments & Longevity Notes")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                    Spacer()
+                    if isEditingReviewNotes {
+                        Button("Done") {
+                            womenDataStore.updateReview(quality: currentItem.qualityRating, durability: currentItem.durabilityRating, reviewNotes: tempReviewNotes, for: currentItem)
+                            isEditingReviewNotes = false
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WomenLuxuryTheme.roseGold)
+                    } else {
+                        Button(currentItem.reviewNotes.isEmpty ? "+ Add Comment" : "Edit") {
+                            tempReviewNotes = currentItem.reviewNotes
+                            isEditingReviewNotes = true
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WomenLuxuryTheme.roseGold)
+                    }
+                }
+
+                if isEditingReviewNotes {
+                    TextField("Notes on drape, embroidery feel, wash care...", text: $tempReviewNotes, axis: .vertical)
+                        .font(.system(size: 13))
+                        .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                        .padding(10)
+                        .background(WomenLuxuryTheme.secondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .lineLimit(3...5)
+                } else if !currentItem.reviewNotes.isEmpty {
+                    Text("\"\(currentItem.reviewNotes)\"")
+                        .font(.system(size: 13, weight: .medium))
+                        .italic()
+                        .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(WomenLuxuryTheme.secondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    Text("No wear comments yet. Tap '+ Add Comment' to record how this piece drapes, feels, or holds up.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WomenLuxuryTheme.textTertiary)
+                }
+            }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)

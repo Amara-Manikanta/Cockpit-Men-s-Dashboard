@@ -318,6 +318,7 @@ public struct TripDetailChecklistView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showAddItemSheet = false
+    @State private var showWardrobePicker = false
     @State private var newItemTitle = ""
     @State private var newItemCategory: ItemCategory = .sportswear
     @State private var showDeleteConfirmation = false
@@ -352,22 +353,37 @@ public struct TripDetailChecklistView: View {
                                 .padding(.horizontal)
                         }
 
-                        // Add Item Button
-                        Button(action: { showAddItemSheet = true }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Add Packing Item")
+                        // Add Item Action Buttons
+                        HStack(spacing: 12) {
+                            Button(action: { showWardrobePicker = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "tshirt.fill")
+                                    Text("Add From Wardrobe")
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Color.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(LuxuryTheme.accentAmber)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(LuxuryTheme.accentAmber)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(LuxuryTheme.cardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(LuxuryTheme.cardBorder, lineWidth: 1)
-                            )
+
+                            Button(action: { showAddItemSheet = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus")
+                                    Text("Custom Item")
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(LuxuryTheme.textPrimary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(LuxuryTheme.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LuxuryTheme.cardBorder, lineWidth: 1)
+                                )
+                            }
                         }
                         .padding(.horizontal)
 
@@ -380,8 +396,12 @@ public struct TripDetailChecklistView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
+                            Button(action: { showWardrobePicker = true }) {
+                                Label("Select from Wardrobe", systemImage: "tshirt.fill")
+                            }
+
                             Button(action: { showAddItemSheet = true }) {
-                                Label("Add Packing Item", systemImage: "plus")
+                                Label("Add Custom Item", systemImage: "plus")
                             }
 
                             Button(action: {
@@ -412,6 +432,14 @@ public struct TripDetailChecklistView: View {
                 }
                 .sheet(isPresented: $showAddItemSheet) {
                     addItemSheet(trip: trip)
+                }
+                .sheet(isPresented: $showWardrobePicker) {
+                    WardrobeItemPickerSheet(dataStore: dataStore) { items in
+                        let newPackingItems = items.map { item in
+                            PackingItem(title: item.name, category: item.category, linkedWardrobeItemId: item.id)
+                        }
+                        dataStore.addPackingItems(tripId: trip.id, newItems: newPackingItems)
+                    }
                 }
                 .alert("Delete Packing List?", isPresented: $showDeleteConfirmation) {
                     Button("Delete", role: .destructive) {
@@ -662,58 +690,271 @@ public struct NewTripSheet: View {
     @State private var purpose = ""
     @State private var durationDays = 3
 
+    // Wardrobe Selection
+    @State private var searchQuery = ""
+    @State private var selectedCategory: ItemCategory? = nil
+    @State private var selectedWardrobeItemIds: Set<UUID> = []
+
     public init(dataStore: DataStore) {
         self.dataStore = dataStore
     }
 
+    private var filteredWardrobeItems: [WardrobeItem] {
+        var list = dataStore.items
+        if let cat = selectedCategory {
+            list = list.filter { $0.category == cat }
+        }
+        let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !q.isEmpty {
+            list = list.filter {
+                $0.name.lowercased().contains(q) ||
+                $0.brand.lowercased().contains(q) ||
+                $0.subcategory.lowercased().contains(q)
+            }
+        }
+        return list
+    }
+
     public var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                TextField("Destination / Trip Name (e.g. Tokyo Tech Summit)", text: $destination)
-                    .font(.system(size: 15))
-                    .padding(14)
-                    .background(LuxuryTheme.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(LuxuryTheme.textPrimary)
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        // 1. Trip Details
+                        VStack(spacing: 12) {
+                            TextField("Destination / Trip Name (e.g. Tokyo Tech Summit)", text: $destination)
+                                .font(.system(size: 15, weight: .medium))
+                                .padding(14)
+                                .background(LuxuryTheme.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(LuxuryTheme.textPrimary)
 
-                TextField("Purpose (e.g. Keynote Presentation & Client Dinners)", text: $purpose)
-                    .font(.system(size: 15))
-                    .padding(14)
-                    .background(LuxuryTheme.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(LuxuryTheme.textPrimary)
+                            TextField("Purpose (e.g. Keynote & Client Dinners)", text: $purpose)
+                                .font(.system(size: 14))
+                                .padding(14)
+                                .background(LuxuryTheme.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(LuxuryTheme.textPrimary)
 
-                Stepper("Duration: \(durationDays) Days", value: $durationDays, in: 1...30)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(LuxuryTheme.textPrimary)
-                    .padding(14)
-                    .background(LuxuryTheme.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            Stepper("Duration: \(durationDays) Days", value: $durationDays, in: 1...30)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(LuxuryTheme.textPrimary)
+                                .padding(14)
+                                .background(LuxuryTheme.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
 
-                Button(action: {
-                    if !destination.isEmpty {
-                        let plan = TripPlan(
-                            destination: destination,
-                            purpose: purpose.isEmpty ? "Travel" : purpose,
-                            durationDays: durationDays
-                        )
-                        dataStore.addTripPlan(plan)
-                        dismiss()
+                        // 2. Select Items from Wardrobe Header
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "tshirt.fill")
+                                    .foregroundStyle(LuxuryTheme.accentAmber)
+                                Text("SELECT ITEMS FROM WARDROBE")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(LuxuryTheme.textTertiary)
+
+                                Spacer()
+
+                                Text("\(selectedWardrobeItemIds.count) Selected")
+                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(LuxuryTheme.accentAmber)
+                            }
+
+                            // Search bar
+                            HStack(spacing: 8) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(LuxuryTheme.textTertiary)
+                                TextField("Search closet pieces...", text: $searchQuery)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(LuxuryTheme.textPrimary)
+                                if !searchQuery.isEmpty {
+                                    Button { searchQuery = "" } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(LuxuryTheme.textTertiary)
+                                    }
+                                }
+                            }
+                            .padding(10)
+                            .background(LuxuryTheme.secondaryBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                            // Category filter chips
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    Button {
+                                        selectedCategory = nil
+                                    } label: {
+                                        Text("All (\(dataStore.items.count))")
+                                            .font(.system(size: 11, weight: selectedCategory == nil ? .bold : .medium))
+                                            .foregroundStyle(selectedCategory == nil ? Color.black : LuxuryTheme.textSecondary)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(selectedCategory == nil ? LuxuryTheme.accentAmber : LuxuryTheme.secondaryBackground)
+                                            .clipShape(Capsule())
+                                    }
+
+                                    ForEach(ItemCategory.allCases) { cat in
+                                        let count = dataStore.itemCount(for: cat)
+                                        Button {
+                                            selectedCategory = (selectedCategory == cat) ? nil : cat
+                                        } label: {
+                                            HStack(spacing: 3) {
+                                                Image(systemName: cat.iconName)
+                                                    .font(.system(size: 9))
+                                                Text(cat.rawValue)
+                                                Text("(\(count))")
+                                                    .opacity(0.7)
+                                            }
+                                            .font(.system(size: 11, weight: selectedCategory == cat ? .bold : .medium))
+                                            .foregroundStyle(selectedCategory == cat ? Color.black : LuxuryTheme.textSecondary)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(selectedCategory == cat ? cat.accentColor : LuxuryTheme.secondaryBackground)
+                                            .clipShape(Capsule())
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Select / Deselect All
+                            HStack {
+                                Text("\(filteredWardrobeItems.count) items available")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(LuxuryTheme.textTertiary)
+                                Spacer()
+                                Button(selectedWardrobeItemIds.count == filteredWardrobeItems.count && !filteredWardrobeItems.isEmpty ? "Deselect All" : "Select All in View") {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    if selectedWardrobeItemIds.count == filteredWardrobeItems.count && !filteredWardrobeItems.isEmpty {
+                                        selectedWardrobeItemIds.removeAll()
+                                    } else {
+                                        for it in filteredWardrobeItems {
+                                            selectedWardrobeItemIds.insert(it.id)
+                                        }
+                                    }
+                                }
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(LuxuryTheme.accentAmber)
+                            }
+                        }
+                        .padding(14)
+                        .luxuryCardStyle(cornerRadius: 14)
+
+                        // 3. Grid of Wardrobe Items
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                            ForEach(filteredWardrobeItems) { item in
+                                let isSelected = selectedWardrobeItemIds.contains(item.id)
+                                Button {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    if isSelected {
+                                        selectedWardrobeItemIds.remove(item.id)
+                                    } else {
+                                        selectedWardrobeItemIds.insert(item.id)
+                                    }
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        ZStack(alignment: .topTrailing) {
+                                            ItemImageView(photoNameOrUrl: item.primaryPhoto, category: item.category)
+                                                .frame(height: 110)
+                                                .frame(maxWidth: .infinity)
+                                                .clipped()
+
+                                            ZStack {
+                                                Circle()
+                                                    .fill(isSelected ? LuxuryTheme.accentAmber : Color.black.opacity(0.55))
+                                                    .frame(width: 24, height: 24)
+
+                                                Image(systemName: isSelected ? "checkmark" : "plus")
+                                                    .font(.system(size: 11, weight: .bold))
+                                                    .foregroundStyle(isSelected ? Color.black : Color.white)
+                                            }
+                                            .padding(6)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(item.brand.uppercased())
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(item.category.accentColor)
+                                                .lineLimit(1)
+
+                                            Text(item.name)
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(LuxuryTheme.textPrimary)
+                                                .lineLimit(2)
+                                                .frame(height: 28, alignment: .topLeading)
+
+                                            HStack {
+                                                Text(item.formattedPrice)
+                                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                    .foregroundStyle(LuxuryTheme.gold)
+                                                Spacer()
+                                                if !item.size.isEmpty {
+                                                    Text(item.size)
+                                                        .font(.system(size: 9))
+                                                        .foregroundStyle(LuxuryTheme.textTertiary)
+                                                }
+                                            }
+                                        }
+                                        .padding(8)
+                                    }
+                                    .background(LuxuryTheme.cardBackground)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(isSelected ? LuxuryTheme.accentAmber : LuxuryTheme.cardBorder, lineWidth: isSelected ? 2 : 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        Spacer(minLength: 85)
                     }
-                }) {
-                    Text("Create Packing List ✨")
+                    .padding(16)
+                }
+
+                // Floating Action Button
+                VStack {
+                    Button(action: {
+                        if !destination.isEmpty {
+                            let chosenItems = dataStore.items.filter { selectedWardrobeItemIds.contains($0.id) }
+                            let packingItems = chosenItems.map { it in
+                                PackingItem(title: it.name, category: it.category, linkedWardrobeItemId: it.id, isPacked: false)
+                            }
+                            let plan = TripPlan(
+                                destination: destination,
+                                purpose: purpose.isEmpty ? "Travel" : purpose,
+                                durationDays: durationDays,
+                                items: packingItems
+                            )
+                            dataStore.addTripPlan(plan)
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            dismiss()
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "suitcase.fill")
+                            Text("Create Packing List (\(selectedWardrobeItemIds.count) Items) ✈️")
+                        }
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color.black)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: 52)
                         .background(destination.isEmpty ? LuxuryTheme.accentAmber.opacity(0.4) : LuxuryTheme.accentAmber)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .shadow(color: destination.isEmpty ? Color.clear : LuxuryTheme.accentAmber.opacity(0.3), radius: 10, y: 4)
+                    }
+                    .disabled(destination.isEmpty)
                 }
-                .disabled(destination.isEmpty)
-
-                Spacer()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+                .background(
+                    LinearGradient(
+                        colors: [Color.clear, LuxuryTheme.background.opacity(0.95), LuxuryTheme.background],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
             }
-            .padding(20)
             .background(LuxuryTheme.background.ignoresSafeArea())
             .navigationTitle("New Packing List")
             .navigationBarTitleDisplayMode(.inline)
