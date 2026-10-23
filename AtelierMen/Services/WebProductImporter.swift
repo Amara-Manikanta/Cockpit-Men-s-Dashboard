@@ -48,6 +48,7 @@ public final class WebProductImporter {
 
         let host = url.host?.lowercased() ?? ""
         let isAmazonHost = host.contains("amazon.") || host.contains("amzn.") || host == "amzn.in" || host == "amzn.to"
+        let isAjioHost = host.contains("ajio.com")
 
         let targetUrl: URL
         let urlSlug: String?
@@ -55,13 +56,20 @@ public final class WebProductImporter {
             let canonical = canonicalizeAmazonUrl(trimmed)
             targetUrl = canonical.url
             urlSlug = canonical.slug
+        } else if isAjioHost {
+            targetUrl = canonicalizeAjioUrl(trimmed)
+            urlSlug = nil
         } else {
             targetUrl = url
             urlSlug = nil
         }
 
         var request = URLRequest(url: targetUrl)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        if isAjioHost {
+            request.setValue("AjioAndroid/8.10.0", forHTTPHeaderField: "User-Agent")
+        } else {
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        }
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7", forHTTPHeaderField: "Accept-Language")
         request.setValue("none", forHTTPHeaderField: "Sec-Fetch-Site")
@@ -79,6 +87,8 @@ public final class WebProductImporter {
             return await parseAmazon(html: html, sourceUrl: trimmed, baseUrl: targetUrl, fallbackSlug: urlSlug)
         } else if finalHost.contains("myntra.com") {
             return await parseMyntra(html: html, sourceUrl: trimmed)
+        } else if isAjioHost || finalHost.contains("ajio.com") {
+            return await parseAjio(html: html, sourceUrl: trimmed)
         } else {
             return await parseGenericWebPage(html: html, sourceUrl: trimmed, baseUrl: targetUrl)
         }
@@ -113,6 +123,16 @@ public final class WebProductImporter {
         }
 
         return (originalUrl, asin, slug)
+    }
+
+    // MARK: - Ajio Canonicalization
+    private func canonicalizeAjioUrl(_ rawUrl: String) -> URL {
+        if let match = extractRegex(pattern: "/p/([0-9a-zA-Z_]+)", from: rawUrl), !match.isEmpty {
+            if let clean = URL(string: "https://www.ajio.com/p/\(match)") {
+                return clean
+            }
+        }
+        return URL(string: rawUrl) ?? URL(string: "https://www.ajio.com")!
     }
 
     // MARK: - Amazon Parsing
@@ -337,6 +357,140 @@ public final class WebProductImporter {
         return await parseGenericWebPage(html: html, sourceUrl: sourceUrl, baseUrl: URL(string: sourceUrl)!)
     }
 
+    // MARK: - Ajio Parsing
+    private func parseAjio(html: String, sourceUrl: String) async -> ImportedProductData {
+        var result = ImportedProductData()
+        result.sourceUrl = sourceUrl
+        result.notes = "Imported from Ajio: \(sourceUrl)"
+
+        // 1. JSON-LD Extraction
+        var parsedName = ""
+        var parsedBrand = ""
+        var parsedPrice: Double = 0.0
+        var parsedCategory = ""
+
+        let scriptPattern = "<script[^>]*type=[\"']application/ld\\+json[\"'][^>]*>(.*?)</script>"
+        if let regex = try? NSRegularExpression(pattern: scriptPattern, options: [.dotMatchesLineSeparators]) {
+            let nsHtml = html as NSString
+            let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: nsHtml.length))
+            for m in matches {
+                let jsonStr = nsHtml.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if jsonStr.contains("Product") {
+                    if let data = jsonStr.data(using: .utf8),
+                       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if let n = obj["name"] as? String, !n.isEmpty {
+                            parsedName = n
+                        }
+                        if let b = obj["brand"] as? [String: Any], let bn = b["name"] as? String {
+                            parsedBrand = bn
+                        } else if let bStr = obj["brand"] as? String {
+                            parsedBrand = bStr
+                        }
+                        if let cat = obj["category"] as? String {
+                            parsedCategory = cat
+                        }
+                        if let offers = obj["offers"] as? [String: Any] {
+                            if let p = offers["price"] as? Double {
+                                parsedPrice = p
+                            } else if let pInt = offers["price"] as? Int {
+                                parsedPrice = Double(pInt)
+                            } else if let pStr = offers["price"] as? String {
+                                let digits = pStr.filter("0123456789.".contains)
+                                parsedPrice = Double(digits) ?? 0.0
+                            }
+                        }
+                        break
+                    }
+                }
+            }
+        }
+
+        // Fallbacks
+        if parsedName.isEmpty {
+            if let t = extractMeta(property: "og:title", from: html) ?? extractTitleTag(from: html) {
+                parsedName = cleanProductTitle(t)
+            }
+        }
+        if parsedBrand.isEmpty {
+            if let b = extractMeta(property: "og:site_name", from: html) {
+                parsedBrand = b != "Ajio.com" ? b : ""
+            }
+        }
+        if parsedPrice == 0 {
+            if let desc = extractMeta(property: "og:description", from: html),
+               let priceMatch = extractRegex(pattern: "Rs\\.\\s*([0-9,]+)", from: desc) {
+                let cleanP = priceMatch.replacingOccurrences(of: ",", with: "")
+                parsedPrice = Double(cleanP) ?? 0.0
+            }
+        }
+
+        result.brand = parsedBrand.isEmpty ? "SIN" : parsedBrand
+        if !parsedBrand.isEmpty && !parsedName.lowercased().contains(parsedBrand.lowercased()) {
+            result.name = "\(parsedBrand) \(cleanProductTitle(parsedName))"
+        } else {
+            result.name = cleanProductTitle(parsedName)
+        }
+        result.price = parsedPrice
+
+        // 2. High-Resolution Studio Image Extraction
+        // Ajio hosts images on assets.ajio.com with format prefixes like -1117Wx1400H-, -473Wx593H-, and -78Wx98H-
+        var highResUrls: [String] = []
+        let assetRegex = "https://assets\\.ajio\\.com/medias/sys_master/root/[^\\s\"'\\}\\],]+"
+        if let reg = try? NSRegularExpression(pattern: assetRegex, options: []) {
+            let ns = html as NSString
+            let assetMatches = reg.matches(in: html, options: [], range: NSRange(location: 0, length: ns.length))
+            var seen = Set<String>()
+            for am in assetMatches {
+                let rawAsset = ns.substring(with: am.range).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                if rawAsset.contains("-1117Wx1400H-") || rawAsset.contains("-1110Wx1400H-") {
+                    if !seen.contains(rawAsset) {
+                        seen.insert(rawAsset)
+                        highResUrls.append(rawAsset)
+                    }
+                }
+            }
+            if highResUrls.isEmpty {
+                for am in assetMatches {
+                    let rawAsset = ns.substring(with: am.range).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                    if rawAsset.contains("-473Wx593H-") {
+                        if !seen.contains(rawAsset) {
+                            seen.insert(rawAsset)
+                            highResUrls.append(rawAsset)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort images so primary MODEL front view is first
+        highResUrls.sort { a, b in
+            func rank(_ url: String) -> Int {
+                if url.contains("-MODEL.") || url.contains("-MODEL_") { return 0 }
+                if url.contains("-MODEL2.") || url.contains("-MODEL2_") { return 1 }
+                if url.contains("-MODEL3.") || url.contains("-MODEL3_") { return 2 }
+                if url.contains("-MODEL4.") || url.contains("-MODEL4_") { return 3 }
+                if url.contains("-MODEL5.") || url.contains("-MODEL5_") { return 4 }
+                return 10
+            }
+            return rank(a) < rank(b)
+        }
+
+        result.photoFilenames = await downloadAllImages(imageUrls: Array(highResUrls.prefix(6)))
+
+        // Category mapping
+        if !parsedCategory.isEmpty {
+            assignCategoryAndSubcategory(for: "\(parsedCategory) \(result.name)".lowercased(), result: &result)
+        } else {
+            assignCategoryAndSubcategory(for: result.name.lowercased(), result: &result)
+        }
+
+        if let desc = extractMeta(property: "og:description", from: html) {
+            result.notes += "\n" + cleanHtmlEntities(desc)
+        }
+
+        return result
+    }
+
     // MARK: - Generic Web Page / OpenGraph
     private func parseGenericWebPage(html: String, sourceUrl: String, baseUrl: URL) async -> ImportedProductData {
         var result = ImportedProductData()
@@ -382,6 +536,8 @@ public final class WebProductImporter {
         t = t.replacingOccurrences(of: "\\s*[:|-]\\s*Amazon\\.[a-z.]+.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s*[:|-]\\s*Buy\\s+Online.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s*\\|\\s*Myntra.*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s*\\|\\s*Ajio\\.com.*", with: "", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: "\\s+(at|on)\\s+Ajio.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s+Online\\s+at\\s+Best\\s+Prices.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s+at\\s+best\\s+price.*", with: "", options: [.regularExpression, .caseInsensitive])
         t = t.replacingOccurrences(of: "\\s*:\\s*(Shoes|Clothing|Electronics|Handbags|Luggage|Beauty|Sports).*", with: "", options: [.regularExpression, .caseInsensitive])
@@ -540,7 +696,7 @@ public final class WebProductImporter {
             if let url = URL(string: urlStr) {
                 if let saved = await downloadAndSaveImage(from: url) {
                     filenames.append(saved)
-                } else {
+                } else if !urlStr.contains("-78Wx98H-") && !urlStr.contains("-288Wx360H-") {
                     // CRITICAL FALLBACK: If local saving fails or times out,
                     // keep the live HTTPS CDN URL! ItemImageView & AsyncImage will render it seamlessly.
                     filenames.append(urlStr)
@@ -558,7 +714,8 @@ public final class WebProductImporter {
         guard let (data, response) = try? await URLSession.shared.data(for: req),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               data.count > 1000,
-              UIImage(data: data) != nil else {
+              let image = UIImage(data: data),
+              image.size.width >= 150 && image.size.height >= 150 else {
             return nil
         }
 
