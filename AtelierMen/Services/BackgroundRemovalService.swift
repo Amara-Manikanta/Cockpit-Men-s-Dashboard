@@ -79,7 +79,7 @@ public final class BackgroundRemovalService {
             throw NSError(domain: "BackgroundRemovalService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Failed to render transparent CGImage"])
         }
         
-        // 4. Processing: Collar preservation & Arm removal
+        // 4. Processing: Erase Head, Hair, Face, Neck Skin, and Bare Arms
         let detectedFaces = faceRequest.results ?? []
         if (removeFace && !detectedFaces.isEmpty) || removeArms {
             let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -97,75 +97,62 @@ public final class BackgroundRemovalService {
             ) {
                 ctx.draw(outputCGImage, in: CGRect(x: 0, y: 0, width: width, height: height))
                 
-                var lowestCollarY: CGFloat = CGFloat(height)
+                var chinRowFromTop = height
                 
                 if removeFace && !detectedFaces.isEmpty {
+                    // Find lowest chin in memory rows (0 = top, height-1 = bottom)
                     for face in detectedFaces {
-                        let box = face.boundingBox
-                        let faceW = box.size.width * CGFloat(width)
-                        let faceH = box.size.height * CGFloat(height)
-                        let faceX = box.origin.x * CGFloat(width)
-                        let faceY = box.origin.y * CGFloat(height)
-                        
-                        let chinY = faceY
-                        let centerX = faceX + faceW * 0.5
-                        
-                        // Keep collar & lapels 100% intact by ending cut right at the base of the chin/throat
-                        let collarY = max(0, chinY - faceH * 0.06)
-                        lowestCollarY = min(lowestCollarY, collarY)
-                        
-                        let headHalfW = max(faceW * 0.95, 25.0)
-                        let neckHalfW = max(faceW * 0.28, 10.0) // Narrow neck only
-                        
-                        ctx.saveGState()
-                        ctx.setBlendMode(.clear)
-                        
-                        let path = CGMutablePath()
-                        path.move(to: CGPoint(x: max(0, centerX - neckHalfW), y: collarY))
-                        path.addQuadCurve(
-                            to: CGPoint(x: min(CGFloat(width), centerX + neckHalfW), y: collarY),
-                            control: CGPoint(x: centerX, y: max(0, collarY - faceH * 0.04))
-                        )
-                        path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: chinY + faceH * 0.35))
-                        path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: CGFloat(height)))
-                        path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: CGFloat(height)))
-                        path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: chinY + faceH * 0.35))
-                        path.closeSubpath()
-                        
-                        ctx.addPath(path)
-                        ctx.fillPath()
-                        ctx.restoreGState()
+                        let chinVisionY = face.boundingBox.origin.y // 0 at bottom, 1 at top
+                        let row = Int((1.0 - chinVisionY) * Double(height))
+                        chinRowFromTop = min(chinRowFromTop, row)
+                    }
+                    
+                    // 1. Clear everything above chin across the full top of the image (head, hair, ears, face)
+                    let clearCeiling = min(height, max(0, chinRowFromTop))
+                    for y in 0..<clearCeiling {
+                        for x in 0..<width {
+                            let offset = (y * width + x) * 4
+                            rawData[offset + 3] = 0
+                            rawData[offset] = 0
+                            rawData[offset + 1] = 0
+                            rawData[offset + 2] = 0
+                        }
                     }
                 }
                 
-                // 5. Remove bare arms and exposed lateral skin if requested
-                if removeArms {
-                    let leftArmThreshold = Int(Double(width) * 0.36)
-                    let rightArmThreshold = Int(Double(width) * 0.64)
-                    
-                    for y in 0..<height {
-                        let yFromBottom = height - 1 - y
-                        for x in 0..<width {
-                            let offset = (y * width + x) * 4
-                            let a = rawData[offset + 3]
-                            if a > 40 {
-                                let r = Double(rawData[offset])
-                                let g = Double(rawData[offset + 1])
-                                let b = Double(rawData[offset + 2])
-                                
-                                // Standard skin detection in YCbCr & RGB
-                                let cb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b
-                                let cr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b
-                                
-                                let isSkin = cb >= 75 && cb <= 135 && cr >= 130 && cr <= 180 && r > g && g > b && (r - g) >= 8
-                                
-                                // Erase if on the side arm zones or in the upper throat area
-                                if isSkin && (x < leftArmThreshold || x > rightArmThreshold || CGFloat(yFromBottom) > lowestCollarY - 12) {
-                                    rawData[offset + 3] = 0
-                                    rawData[offset] = 0
-                                    rawData[offset + 1] = 0
-                                    rawData[offset + 2] = 0
-                                }
+                // 2. Erase neck skin & bare arm skin
+                // In image memory: row 0 is top of image, row height-1 is bottom!
+                let collarSearchMaxRow = min(height, chinRowFromTop + Int(Double(height) * 0.28))
+                let leftArmThreshold = Int(Double(width) * 0.36)
+                let rightArmThreshold = Int(Double(width) * 0.64)
+                
+                let startRow = removeFace ? max(0, chinRowFromTop) : 0
+                for y in startRow..<height {
+                    for x in 0..<width {
+                        let offset = (y * width + x) * 4
+                        let a = rawData[offset + 3]
+                        if a > 30 {
+                            let r = Double(rawData[offset])
+                            let g = Double(rawData[offset + 1])
+                            let b = Double(rawData[offset + 2])
+                            
+                            // YCbCr & RGB human skin tone detector
+                            let cb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b
+                            let cr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b
+                            
+                            let isSkin = cb >= 70.0 && cb <= 140.0 && cr >= 125.0 && cr <= 185.0 && r > g && g > b
+                            
+                            // Condition A: Neck skin (between chin and collar)
+                            let isNeckSkin = removeFace && isSkin && (y <= collarSearchMaxRow)
+                            
+                            // Condition B: Bare arm skin (on lateral flanks below sleeves)
+                            let isArmSkin = removeArms && isSkin && (x < leftArmThreshold || x > rightArmThreshold)
+                            
+                            if isNeckSkin || isArmSkin {
+                                rawData[offset + 3] = 0
+                                rawData[offset] = 0
+                                rawData[offset + 1] = 0
+                                rawData[offset + 2] = 0
                             }
                         }
                     }
