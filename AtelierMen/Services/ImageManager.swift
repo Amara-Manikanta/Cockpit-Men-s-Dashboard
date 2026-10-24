@@ -41,6 +41,14 @@ public final class ImageManager {
         let fileURL = documentsDirectory.appendingPathComponent(filename)
         try? FileManager.default.removeItem(at: fileURL)
     }
+
+    public func loadUIImage(for filenameOrUrl: String) -> UIImage? {
+        if let localUrl = localImageUrl(for: filenameOrUrl),
+           let data = try? Data(contentsOf: localUrl) {
+            return UIImage(data: data)
+        }
+        return nil
+    }
 }
 
 public struct ItemImageView: View {

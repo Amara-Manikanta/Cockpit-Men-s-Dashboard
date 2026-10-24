@@ -32,6 +32,11 @@ public struct WomenAddEditItemView: View {
     @State private var showScannerSheet: Bool = false
     @State private var showWebImportSheet: Bool = false
 
+    // AI Background Removal
+    @State private var isRemovingBackground: Bool = false
+    @State private var backgroundRemovalError: String? = nil
+    @State private var lastCutoutResult: SegmentationResult? = nil
+
     public init(womenDataStore: WomenDataStore, existingItem: WomenWardrobeItem? = nil) {
         self.womenDataStore = womenDataStore
         self.existingItem = existingItem
@@ -271,6 +276,119 @@ public struct WomenAddEditItemView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(WomenLuxuryTheme.roseGold.opacity(0.4), lineWidth: 1))
                 }
+            }
+
+            // On-Device AI Background Removal Card
+            if !photos.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Divider()
+                        .background(WomenLuxuryTheme.cardBorder)
+                        .padding(.vertical, 4)
+
+                    HStack {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundStyle(WomenLuxuryTheme.roseGold)
+                        Text("On-Device AI Cutout")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                        Spacer()
+                        Text("Vision Neural Engine")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(WomenLuxuryTheme.roseGold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(WomenLuxuryTheme.roseGold.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+
+                    if isRemovingBackground {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                                .tint(WomenLuxuryTheme.roseGold)
+                            Text("Isolating dress & analyzing color...")
+                                .font(.system(size: 12))
+                                .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6)
+                    } else {
+                        Button(action: {
+                            runBackgroundRemoval()
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "person.crop.artframe")
+                                Text(photos.first?.hasPrefix("cutout_") == true ? "Re-Run Background Removal" : "Remove Background (Transparent Cutout)")
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                            .background(
+                                LinearGradient(
+                                    colors: [WomenLuxuryTheme.roseGold, WomenLuxuryTheme.champagne],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+
+                    if let err = backgroundRemovalError {
+                        Text(err)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                    }
+
+                    if let result = lastCutoutResult {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(white: 0.15))
+                                    .frame(width: 50, height: 60)
+                                Image(uiImage: result.cutoutImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 44, height: 54)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color.green)
+                                    Text("Cutout Generated & Saved")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                                }
+
+                                HStack(spacing: 8) {
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(Color(hex: result.dominantColorHex) ?? .gray)
+                                            .frame(width: 12, height: 12)
+                                        Text(result.dominantColorHex)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(WomenLuxuryTheme.textSecondary)
+                                    }
+
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(Color(hex: result.accentColorHex) ?? .gray)
+                                            .frame(width: 12, height: 12)
+                                        Text(result.colorName)
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundStyle(WomenLuxuryTheme.roseGold)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(8)
+                        .background(Color(white: 0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(.top, 4)
             }
         }
     }
@@ -719,6 +837,51 @@ public struct WomenAddEditItemView: View {
         if !imported.sourceUrl.isEmpty { storeUrl = imported.sourceUrl }
         if !imported.notes.isEmpty {
             notes = notes.isEmpty ? imported.notes : (notes + "\n" + imported.notes)
+        }
+    }
+
+    private func runBackgroundRemoval() {
+        guard let cover = photos.first, !cover.isEmpty else {
+            backgroundRemovalError = "Please select or add a photo first."
+            return
+        }
+
+        isRemovingBackground = true
+        backgroundRemovalError = nil
+
+        Task {
+            var imageToProcess: UIImage? = ImageManager.shared.loadUIImage(for: cover)
+
+            if imageToProcess == nil, let url = URL(string: cover), cover.hasPrefix("http") {
+                if let (data, _) = try? await URLSession.shared.data(from: url) {
+                    imageToProcess = UIImage(data: data)
+                }
+            }
+
+            guard let targetImage = imageToProcess else {
+                await MainActor.run {
+                    self.backgroundRemovalError = "Could not load image data for processing."
+                    self.isRemovingBackground = false
+                }
+                return
+            }
+
+            do {
+                let result = try await BackgroundRemovalService.shared.removeBackground(from: targetImage)
+                await MainActor.run {
+                    self.lastCutoutResult = result
+                    if !self.photos.contains(result.cutoutFilename) {
+                        self.photos.insert(result.cutoutFilename, at: 0)
+                    }
+                    self.isRemovingBackground = false
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    self.backgroundRemovalError = "On-Device AI error: \(error.localizedDescription)"
+                    self.isRemovingBackground = false
+                }
+            }
         }
     }
 }
