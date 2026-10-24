@@ -21,11 +21,13 @@ public final class BackgroundRemovalService {
     
     /**
      * Executes on-device foreground segmentation using Apple's Neural Engine Vision framework.
-     * When removeFace is true (default), automatically detects model faces and erases head/hair/neck
-     * down to the collar, isolating the pure garment for clean wardrobe archiving.
+     * - When removeFace is true (default), automatically removes model head, hair, ears, and neck
+     *   while preserving the complete shirt collar, lapels, buttons, and shoulder slopes.
+     * - When removeArms is true (default), removes exposed model arms & skin on the flanks
+     *   so only the pure garment remains.
      * Produces a clean transparent cutout (ARGB 32-bit PNG) and analyzes the dominant & accent colors.
      */
-    public func removeBackground(from uiImage: UIImage, removeFace: Bool = true) async throws -> SegmentationResult {
+    public func removeBackground(from uiImage: UIImage, removeFace: Bool = true, removeArms: Bool = true) async throws -> SegmentationResult {
         // Fix image orientation if needed
         let normalizedImage = normalizeOrientation(uiImage)
         guard let cgImage = normalizedImage.cgImage else {
@@ -42,7 +44,7 @@ public final class BackgroundRemovalService {
         
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         
-        if removeFace {
+        if removeFace || removeArms {
             try handler.perform([maskRequest, faceRequest, poseRequest])
         } else {
             try handler.perform([maskRequest])
@@ -77,14 +79,15 @@ public final class BackgroundRemovalService {
             throw NSError(domain: "BackgroundRemovalService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Failed to render transparent CGImage"])
         }
         
-        // 4. If removeFace is requested and faces are detected, erase the head/face/neck
+        // 4. Processing: Collar preservation & Arm removal
         let detectedFaces = faceRequest.results ?? []
-        if removeFace && !detectedFaces.isEmpty {
+        if (removeFace && !detectedFaces.isEmpty) || removeArms {
             let colorSpace = CGColorSpaceCreateDeviceRGB()
             let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
             
+            var rawData = [UInt8](repeating: 0, count: width * height * 4)
             if let ctx = CGContext(
-                data: nil,
+                data: &rawData,
                 width: width,
                 height: height,
                 bitsPerComponent: 8,
@@ -94,59 +97,78 @@ public final class BackgroundRemovalService {
             ) {
                 ctx.draw(outputCGImage, in: CGRect(x: 0, y: 0, width: width, height: height))
                 
-                let poses = poseRequest.results ?? []
-                let firstPose = poses.first
+                var lowestCollarY: CGFloat = CGFloat(height)
                 
-                for face in detectedFaces {
-                    let box = face.boundingBox
-                    let faceW = box.size.width * CGFloat(width)
-                    let faceH = box.size.height * CGFloat(height)
-                    let faceX = box.origin.x * CGFloat(width)
-                    let faceY = box.origin.y * CGFloat(height)
-                    
-                    let chinY = faceY
-                    let centerX = faceX + faceW * 0.5
-                    
-                    // Determine collar / neckline cutoff
-                    var collarY = chinY - faceH * 0.32
-                    if let pose = firstPose,
-                       let neckPoint = try? pose.recognizedPoint(.neck),
-                       neckPoint.confidence > 0.2 {
-                        collarY = neckPoint.location.y * CGFloat(height)
+                if removeFace && !detectedFaces.isEmpty {
+                    for face in detectedFaces {
+                        let box = face.boundingBox
+                        let faceW = box.size.width * CGFloat(width)
+                        let faceH = box.size.height * CGFloat(height)
+                        let faceX = box.origin.x * CGFloat(width)
+                        let faceY = box.origin.y * CGFloat(height)
+                        
+                        let chinY = faceY
+                        let centerX = faceX + faceW * 0.5
+                        
+                        // Keep collar & lapels 100% intact by ending cut right at the base of the chin/throat
+                        let collarY = max(0, chinY - faceH * 0.06)
+                        lowestCollarY = min(lowestCollarY, collarY)
+                        
+                        let headHalfW = max(faceW * 0.95, 25.0)
+                        let neckHalfW = max(faceW * 0.28, 10.0) // Narrow neck only
+                        
+                        ctx.saveGState()
+                        ctx.setBlendMode(.clear)
+                        
+                        let path = CGMutablePath()
+                        path.move(to: CGPoint(x: max(0, centerX - neckHalfW), y: collarY))
+                        path.addQuadCurve(
+                            to: CGPoint(x: min(CGFloat(width), centerX + neckHalfW), y: collarY),
+                            control: CGPoint(x: centerX, y: max(0, collarY - faceH * 0.04))
+                        )
+                        path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: chinY + faceH * 0.35))
+                        path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: CGFloat(height)))
+                        path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: CGFloat(height)))
+                        path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: chinY + faceH * 0.35))
+                        path.closeSubpath()
+                        
+                        ctx.addPath(path)
+                        ctx.fillPath()
+                        ctx.restoreGState()
                     }
-                    collarY = max(0, collarY)
+                }
+                
+                // 5. Remove bare arms and exposed lateral skin if requested
+                if removeArms {
+                    let leftArmThreshold = Int(Double(width) * 0.36)
+                    let rightArmThreshold = Int(Double(width) * 0.64)
                     
-                    let headHalfW = max(faceW * 0.85, 20.0)
-                    let neckHalfW = max(faceW * 0.42, 12.0)
-                    
-                    ctx.saveGState()
-                    ctx.setBlendMode(.clear)
-                    
-                    let path = CGMutablePath()
-                    // Neck bottom left (at collar)
-                    path.move(to: CGPoint(x: max(0, centerX - neckHalfW), y: collarY))
-                    
-                    // Curved collarline transition
-                    path.addQuadCurve(
-                        to: CGPoint(x: min(CGFloat(width), centerX + neckHalfW), y: collarY),
-                        control: CGPoint(x: centerX, y: max(0, collarY - faceH * 0.08))
-                    )
-                    
-                    // Up right neck to ear/hair level
-                    path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: chinY + faceH * 0.4))
-                    // Up right side of head to top of image
-                    path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: CGFloat(height)))
-                    // Across top of image
-                    path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: CGFloat(height)))
-                    // Down left side of head
-                    path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: chinY + faceH * 0.4))
-                    // Back to collar start
-                    path.closeSubpath()
-                    
-                    ctx.addPath(path)
-                    ctx.fillPath()
-                    
-                    ctx.restoreGState()
+                    for y in 0..<height {
+                        let yFromBottom = height - 1 - y
+                        for x in 0..<width {
+                            let offset = (y * width + x) * 4
+                            let a = rawData[offset + 3]
+                            if a > 40 {
+                                let r = Double(rawData[offset])
+                                let g = Double(rawData[offset + 1])
+                                let b = Double(rawData[offset + 2])
+                                
+                                // Standard skin detection in YCbCr & RGB
+                                let cb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b
+                                let cr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b
+                                
+                                let isSkin = cb >= 75 && cb <= 135 && cr >= 130 && cr <= 180 && r > g && g > b && (r - g) >= 8
+                                
+                                // Erase if on the side arm zones or in the upper throat area
+                                if isSkin && (x < leftArmThreshold || x > rightArmThreshold || CGFloat(yFromBottom) > lowestCollarY - 12) {
+                                    rawData[offset + 3] = 0
+                                    rawData[offset] = 0
+                                    rawData[offset + 1] = 0
+                                    rawData[offset + 2] = 0
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 if let cleanedCG = ctx.makeImage() {
@@ -157,7 +179,7 @@ public final class BackgroundRemovalService {
         
         let cutoutUIImage = UIImage(cgImage: outputCGImage)
         
-        // 5. Save PNG to Documents
+        // 6. Save PNG to Documents
         guard let pngData = cutoutUIImage.pngData() else {
             throw NSError(domain: "BackgroundRemovalService", code: -6, userInfo: [NSLocalizedDescriptionKey: "Failed to encode transparent PNG data"])
         }

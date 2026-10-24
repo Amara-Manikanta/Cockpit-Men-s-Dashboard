@@ -35,6 +35,7 @@ public struct WomenAddEditItemView: View {
     // AI Background Removal
     @State private var isRemovingBackground: Bool = false
     @State private var removeModelFace: Bool = true
+    @State private var removeBareArms: Bool = true
     @State private var backgroundRemovalError: String? = nil
     @State private var lastCutoutResult: SegmentationResult? = nil
 
@@ -312,6 +313,18 @@ public struct WomenAddEditItemView: View {
                         }
                     }
                     .tint(WomenLuxuryTheme.roseGold)
+                    .padding(.vertical, 2)
+
+                    Toggle(isOn: $removeBareArms) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "figure.arms.open")
+                                .foregroundStyle(WomenLuxuryTheme.champagne)
+                            Text("Remove Bare Arms & Exposed Skin")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(WomenLuxuryTheme.textPrimary)
+                        }
+                    }
+                    .tint(WomenLuxuryTheme.champagne)
                     .padding(.vertical, 2)
 
                     if isRemovingBackground {
@@ -863,6 +876,7 @@ public struct WomenAddEditItemView: View {
         backgroundRemovalError = nil
 
         let removeFaceOption = self.removeModelFace
+        let removeArmsOption = self.removeBareArms
 
         Task {
             var imageToProcess: UIImage? = ImageManager.shared.loadUIImage(for: sourcePhoto)
@@ -882,7 +896,7 @@ public struct WomenAddEditItemView: View {
             }
 
             do {
-                let result = try await BackgroundRemovalService.shared.removeBackground(from: targetImage, removeFace: removeFaceOption)
+                let result = try await BackgroundRemovalService.shared.removeBackground(from: targetImage, removeFace: removeFaceOption, removeArms: removeArmsOption)
                 await MainActor.run {
                     self.lastCutoutResult = result
                     self.photos.removeAll(where: { $0.hasPrefix("cutout_") })
