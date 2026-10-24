@@ -24,6 +24,7 @@ public struct AddEditItemView: View {
 
     // AI Background Removal
     @State private var isRemovingBackground = false
+    @State private var removeModelFace = true
     @State private var backgroundRemovalError: String? = nil
     @State private var lastCutoutResult: SegmentationResult? = nil
 
@@ -317,6 +318,18 @@ public struct AddEditItemView: View {
                             .background(LuxuryTheme.accentGold.opacity(0.15))
                             .clipShape(Capsule())
                     }
+
+                    Toggle(isOn: $removeModelFace) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.crop.circle.badge.minus")
+                                .foregroundStyle(LuxuryTheme.accentGold)
+                            Text("Remove Model Head & Face")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LuxuryTheme.textPrimary)
+                        }
+                    }
+                    .tint(LuxuryTheme.accentGold)
+                    .padding(.vertical, 2)
 
                     if isRemovingBackground {
                         HStack(spacing: 12) {
@@ -906,7 +919,8 @@ public struct AddEditItemView: View {
     }
 
     private func runBackgroundRemoval() {
-        guard let cover = photos.first, !cover.isEmpty else {
+        // Find source photo: prefer original photo if first photo is already a cutout
+        guard let sourcePhoto = photos.first(where: { !$0.hasPrefix("cutout_") }) ?? photos.first, !sourcePhoto.isEmpty else {
             backgroundRemovalError = "Please select or add a photo first."
             return
         }
@@ -914,10 +928,12 @@ public struct AddEditItemView: View {
         isRemovingBackground = true
         backgroundRemovalError = nil
 
-        Task {
-            var imageToProcess: UIImage? = ImageManager.shared.loadUIImage(for: cover)
+        let removeFaceOption = self.removeModelFace
 
-            if imageToProcess == nil, let url = URL(string: cover), cover.hasPrefix("http") {
+        Task {
+            var imageToProcess: UIImage? = ImageManager.shared.loadUIImage(for: sourcePhoto)
+
+            if imageToProcess == nil, let url = URL(string: sourcePhoto), sourcePhoto.hasPrefix("http") {
                 if let (data, _) = try? await URLSession.shared.data(from: url) {
                     imageToProcess = UIImage(data: data)
                 }
@@ -932,12 +948,11 @@ public struct AddEditItemView: View {
             }
 
             do {
-                let result = try await BackgroundRemovalService.shared.removeBackground(from: targetImage)
+                let result = try await BackgroundRemovalService.shared.removeBackground(from: targetImage, removeFace: removeFaceOption)
                 await MainActor.run {
                     self.lastCutoutResult = result
-                    if !self.photos.contains(result.cutoutFilename) {
-                        self.photos.insert(result.cutoutFilename, at: 0)
-                    }
+                    self.photos.removeAll(where: { $0.hasPrefix("cutout_") })
+                    self.photos.insert(result.cutoutFilename, at: 0)
                     if self.color.isEmpty {
                         self.color = result.colorName
                     }

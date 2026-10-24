@@ -21,27 +21,40 @@ public final class BackgroundRemovalService {
     
     /**
      * Executes on-device foreground segmentation using Apple's Neural Engine Vision framework.
+     * When removeFace is true (default), automatically detects model faces and erases head/hair/neck
+     * down to the collar, isolating the pure garment for clean wardrobe archiving.
      * Produces a clean transparent cutout (ARGB 32-bit PNG) and analyzes the dominant & accent colors.
      */
-    public func removeBackground(from uiImage: UIImage) async throws -> SegmentationResult {
+    public func removeBackground(from uiImage: UIImage, removeFace: Bool = true) async throws -> SegmentationResult {
         // Fix image orientation if needed
         let normalizedImage = normalizeOrientation(uiImage)
         guard let cgImage = normalizedImage.cgImage else {
             throw NSError(domain: "BackgroundRemovalService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid CGImage representation"])
         }
         
-        // 1. Vision Foreground Instance Mask Request
-        let request = VNGenerateForegroundInstanceMaskRequest()
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        try handler.perform([request])
+        let width = cgImage.width
+        let height = cgImage.height
         
-        guard let result = request.results?.first else {
+        // 1. Vision Requests: Foreground Mask + Face Detection + Pose Detection
+        let maskRequest = VNGenerateForegroundInstanceMaskRequest()
+        let faceRequest = VNDetectFaceRectanglesRequest()
+        let poseRequest = VNDetectHumanBodyPoseRequest()
+        
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        
+        if removeFace {
+            try handler.perform([maskRequest, faceRequest, poseRequest])
+        } else {
+            try handler.perform([maskRequest])
+        }
+        
+        guard let maskResult = maskRequest.results?.first else {
             throw NSError(domain: "BackgroundRemovalService", code: -2, userInfo: [NSLocalizedDescriptionKey: "No salient subject detected in image"])
         }
         
         // 2. Generate pixel buffer mask at full image resolution
-        let maskPixelBuffer = try result.generateScaledMaskForImage(
-            forInstances: result.allInstances,
+        let maskPixelBuffer = try maskResult.generateScaledMaskForImage(
+            forInstances: maskResult.allInstances,
             from: handler
         )
         
@@ -60,13 +73,91 @@ public final class BackgroundRemovalService {
             throw NSError(domain: "BackgroundRemovalService", code: -4, userInfo: [NSLocalizedDescriptionKey: "Failed to produce masked image"])
         }
         
-        guard let outputCGImage = ciContext.createCGImage(outputCIImage, from: CGRect(origin: .zero, size: CGSize(width: cgImage.width, height: cgImage.height))) else {
+        guard var outputCGImage = ciContext.createCGImage(outputCIImage, from: CGRect(origin: .zero, size: CGSize(width: width, height: height))) else {
             throw NSError(domain: "BackgroundRemovalService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Failed to render transparent CGImage"])
+        }
+        
+        // 4. If removeFace is requested and faces are detected, erase the head/face/neck
+        let detectedFaces = faceRequest.results ?? []
+        if removeFace && !detectedFaces.isEmpty {
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+            
+            if let ctx = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: colorSpace,
+                bitmapInfo: bitmapInfo
+            ) {
+                ctx.draw(outputCGImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+                
+                let poses = poseRequest.results ?? []
+                let firstPose = poses.first
+                
+                for face in detectedFaces {
+                    let box = face.boundingBox
+                    let faceW = box.size.width * CGFloat(width)
+                    let faceH = box.size.height * CGFloat(height)
+                    let faceX = box.origin.x * CGFloat(width)
+                    let faceY = box.origin.y * CGFloat(height)
+                    
+                    let chinY = faceY
+                    let centerX = faceX + faceW * 0.5
+                    
+                    // Determine collar / neckline cutoff
+                    var collarY = chinY - faceH * 0.32
+                    if let pose = firstPose,
+                       let neckPoint = try? pose.recognizedPoint(.neck),
+                       neckPoint.confidence > 0.2 {
+                        collarY = neckPoint.location.y * CGFloat(height)
+                    }
+                    collarY = max(0, collarY)
+                    
+                    let headHalfW = max(faceW * 0.85, 20.0)
+                    let neckHalfW = max(faceW * 0.42, 12.0)
+                    
+                    ctx.saveGState()
+                    ctx.setBlendMode(.clear)
+                    
+                    let path = CGMutablePath()
+                    // Neck bottom left (at collar)
+                    path.move(to: CGPoint(x: max(0, centerX - neckHalfW), y: collarY))
+                    
+                    // Curved collarline transition
+                    path.addQuadCurve(
+                        to: CGPoint(x: min(CGFloat(width), centerX + neckHalfW), y: collarY),
+                        control: CGPoint(x: centerX, y: max(0, collarY - faceH * 0.08))
+                    )
+                    
+                    // Up right neck to ear/hair level
+                    path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: chinY + faceH * 0.4))
+                    // Up right side of head to top of image
+                    path.addLine(to: CGPoint(x: min(CGFloat(width), centerX + headHalfW), y: CGFloat(height)))
+                    // Across top of image
+                    path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: CGFloat(height)))
+                    // Down left side of head
+                    path.addLine(to: CGPoint(x: max(0, centerX - headHalfW), y: chinY + faceH * 0.4))
+                    // Back to collar start
+                    path.closeSubpath()
+                    
+                    ctx.addPath(path)
+                    ctx.fillPath()
+                    
+                    ctx.restoreGState()
+                }
+                
+                if let cleanedCG = ctx.makeImage() {
+                    outputCGImage = cleanedCG
+                }
+            }
         }
         
         let cutoutUIImage = UIImage(cgImage: outputCGImage)
         
-        // 4. Save PNG to Documents
+        // 5. Save PNG to Documents
         guard let pngData = cutoutUIImage.pngData() else {
             throw NSError(domain: "BackgroundRemovalService", code: -6, userInfo: [NSLocalizedDescriptionKey: "Failed to encode transparent PNG data"])
         }
@@ -74,7 +165,7 @@ public final class BackgroundRemovalService {
         let filename = "cutout_\(UUID().uuidString).png"
         _ = ImageManager.shared.saveImageData(pngData, filename: filename)
         
-        // 5. Extract dominant colors from the cutout subject
+        // 6. Extract dominant colors from the cutout subject
         let (dominantHex, accentHex, colorName) = extractDominantColors(from: outputCGImage)
         
         return SegmentationResult(
